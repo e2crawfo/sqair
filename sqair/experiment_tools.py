@@ -153,7 +153,7 @@ def load(conf_path, *args, **kwargs):
         raise ValueError("The config file should specify 'load' function but no such function was "
                            "found in {}".format(module.__file__))
 
-    print "Loading '{}' from {}".format(module.__name__, module.__file__)
+    print("Loading '{}' from {}".format(module.__name__, module.__file__))
     return load_func(*args, **kwargs)
 
 
@@ -187,7 +187,7 @@ def _load_flags(*config_paths):
     :return:
     """
     for config_path in config_paths:
-        print 'loading flags from', config_path
+        print('loading flags from', config_path)
         _import_module(config_path)
 
 
@@ -213,18 +213,18 @@ def _restore_flags(flags):
 def print_flags():
     flags = tf_flags.FLAGS.__flags
 
-    print 'Flags:'
+    print('Flags:')
     keys = sorted(flags.keys())
-    print '=' * 60
+    print('=' * 60)
     for k in keys:
-        print '\t{}: {}'.format(k, flags[k])
-    print '=' * 60
-    print
+        print('\t{}: {}'.format(k, flags[k]))
+    print('=' * 60)
+    print()
 
 
 def set_flags(**flag_dict):
-    for k, v in flag_dict.iteritems():
-       sys.argv.append('--{}={}'.format(k, v))
+    for k, v in flag_dict.items():
+        sys.argv.append('--{}={}'.format(k, v))
 
 
 def assert_all_flags_parsed():
@@ -234,18 +234,18 @@ def assert_all_flags_parsed():
 
 
 def get_git_revision_hash():
-    return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
+    return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip().decode()
 
 
 def set_flags_if_notebook(**flags_to_set):
     if is_notebook() and flags_to_set:
-        print 'Setting the following flags:'
+        print('Setting the following flags:')
         keys = sorted(flags_to_set.keys())
         for k in keys[:-1]:
-            print ' --{}={}\\'.format(k, flags_to_set[k])
+            print(' --{}={}\\'.format(k, flags_to_set[k]))
 
         k = keys[-1]
-        print ' --{}={}'.format(k, flags_to_set[k])
+        print(' --{}={}'.format(k, flags_to_set[k]))
 
         set_flags(**flags_to_set)
 
@@ -305,7 +305,7 @@ def format_integer(number, group_size=3):
 def print_num_params():
     num_params = sum([np.prod(v.shape.as_list(), dtype=int) for v in tf.trainable_variables()])
     num_params = format_integer(num_params)
-    print 'Number of trainable parameters: {}'.format(num_params)
+    print('Number of trainable parameters: {}'.format(num_params))
 
 
 def print_variables_by_scope():
@@ -320,17 +320,17 @@ def print_variables_by_scope():
         if current_scope != last_scope or i == len(vars) - 1:
             if last_scope is not None:
                 scope_n_params = format_integer(scope_n_params)
-                print '{} scope params = {}'.format(last_scope, scope_n_params)
-                print
+                print('{} scope params = {}'.format(last_scope, scope_n_params))
+                print()
 
-            print 'scope:', current_scope
+            print('scope:', current_scope)
             scope_n_params = 0
 
         last_scope = current_scope
         n_params = np.prod(shape, dtype=np.int32)
         scope_n_params += n_params
-        print '\t', name, shape
-    print
+        print('\t', name, shape)
+    print()
 
 
 def get_session():
@@ -354,17 +354,18 @@ if __name__ == '__main__':
     # sys.argv.append('--model_flag=-1')
     # print sys.argv
 
-    experiment_folder, loaded_flags, checkpoint_dir = init_checkpoint(checkpoint_dir, data_config, model_config, resume=False)
+    experiment_folder, loaded_flags, checkpoint_dir = init_checkpoint(
+        checkpoint_dir, data_config, model_config, resume=False)
 
-    print experiment_folder
-    print loaded_flags
-    print checkpoint_dir
-    print sys.argv
+    print(experiment_folder)
+    print(loaded_flags)
+    print(checkpoint_dir)
+    print(sys.argv)
 
-    print
-    print 'tf.flags:'
-    for k, v in tf_flags.FLAGS.__flags.iteritems():
-        print k, v
+    print()
+    print('tf.flags:')
+    for k, v in tf_flags.FLAGS.__flags.items():
+        print(k, v)
     # batch_size = 64
     # data_dict = load(data_config, batch_size)
     # print data_dict.keys()

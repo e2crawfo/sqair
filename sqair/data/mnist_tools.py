@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 from attrdict import AttrDict
 
-from sqair.data import load_data as _load_data, tensors_from_data as _tensors
+from sqair.data.data import load_data as _load_data, tensors_from_data as _tensors
 from sqair import tf_flags as flags
 from sqair.index import dynamic_truncate
 
@@ -60,7 +60,6 @@ def process_data(data, n_timesteps):
 
 
 def load(batch_size, n_timesteps=None):
-
     F = flags.FLAGS
 
     valid_data = _load_data(F.valid_path)
@@ -88,7 +87,7 @@ def load(batch_size, n_timesteps=None):
         tf.summary.scalar('seq_len', stage_seq_len)
 
         for d in (train_tensors, valid_tensors):
-            for k, v in d.iteritems():
+            for k, v in d.items():
                 d[k] = dynamic_truncate(v, stage_seq_len)
 
     data_dict = AttrDict(

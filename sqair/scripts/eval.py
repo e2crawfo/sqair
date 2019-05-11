@@ -85,10 +85,10 @@ if __name__ == '__main__':
     flags.update(restored_flags)
     _restore_flags(flags)
 
-    print 'Processing:', F.checkpoint_dir
+    print('Processing:', F.checkpoint_dir)
     checkpoint_state = tf.train.get_checkpoint_state(F.checkpoint_dir)
     if checkpoint_state is None:
-        print 'No checkpoints found in {}'.format(F.checkpoint_dir)
+        print('No checkpoints found in {}'.format(F.checkpoint_dir))
 
     checkpoint_paths = checkpoint_state.all_model_checkpoint_paths
 
@@ -192,10 +192,10 @@ if __name__ == '__main__':
         n_itr = int(checkpoint_path.split('-')[-1])
 
         if n_itr in evaluated_checkpoints:
-            print 'Skipping checkpoint:', n_itr
+            print('Skipping checkpoint:', n_itr)
             continue
 
-        print 'Processing checkpoint:', n_itr,
+        print('Processing checkpoint:', n_itr, end=' ')
         sys.stdout.flush()
 
         saver.restore(sess, checkpoint_path)
@@ -207,18 +207,18 @@ if __name__ == '__main__':
         kl_estimate = 0.
 
         start = time.time()
-        print 'num_batches', n_batches
-        for batch_num in xrange(n_batches):
-            print 'batch_num', batch_num
+        print('num_batches', n_batches)
+        for batch_num in range(n_batches):
+            print('batch_num', batch_num)
             values = sess.run(tensors)
-            for k, v in values.iteritems():
+            for k, v in values.items():
                 estimates[k] += v
 
-        for k, v in estimates.iteritems():
+        for k, v in estimates.items():
             estimates[k] = v / n_batches
 
             with open(files[k], 'a') as f:
                 f.write('{}: {}\n'.format(n_itr, estimates[k]))
 
         duration = time.time() - start
-        print 'took {}s'.format(duration)
+        print('took {}s'.format(duration))

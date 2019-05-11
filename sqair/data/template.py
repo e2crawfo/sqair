@@ -59,9 +59,9 @@ class TemplateDataset(object):
         n_samples = len(templates)
         canvas = np.zeros((self.n_timesteps, n_samples) + self._canvas_size, dtype=np.float32)
 
-        for i, (tjs, seq_templates) in enumerate(itertools.izip(coords, templates)):
+        for i, (tjs, seq_templates) in enumerate(zip(coords, templates)):
             for tj, template in zip(tjs, seq_templates):
-                for t in xrange(len(tj)):
+                for t in range(len(tj)):
                     self._blend(canvas[t, i], template, tj[t])
 
         return convert_img_dtype(canvas, dtype)

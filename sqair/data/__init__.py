@@ -20,5 +20,3 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 # 
 ########################################################################################
-
-from data import load_data, tensors_from_data, MNIST

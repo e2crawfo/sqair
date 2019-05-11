@@ -39,7 +39,7 @@ from matplotlib.patches import Rectangle
 
 from attrdict import AttrDict
 
-from modules import SpatialTransformer
+from sqair.modules import SpatialTransformer
 
 
 bbox_colors = """
@@ -110,7 +110,7 @@ class ProgressFig(object):
         # reconstructions with marked steps
         for i, ax in enumerate(axes[1]):
             ax.imshow(o.canvas[i], cmap=cmap, vmin=0, vmax=1)
-            for j, c in zip(xrange(self.n_steps), self._BBOX_COLORS):
+            for j, c in zip(range(self.n_steps), self._BBOX_COLORS):
                 if o.presence[i, j] > .5:
                     self._rect(ax, o.where[i, j], c)
 
@@ -150,7 +150,7 @@ class ProgressFig(object):
 
         cmap = self._cmap(o.obs)
         for t, ax in enumerate(axes.T):
-            for n in xrange(self.seq_n_samples):
+            for n in range(self.seq_n_samples):
                 pres_time = o.presence[t, n, :]
                 obj_id_time = o.obj_id[t, n, :]
                 ax[2 * n].imshow(o.obs[t, n], cmap=cmap, vmin=0., vmax=1.)
@@ -167,7 +167,7 @@ class ProgressFig(object):
                     if p > .5:
                         self._rect(ax[2 * n + 1], o.where[t, n, i], c, line_width=1.)
 
-        for n in xrange(self.seq_n_samples):
+        for n in range(self.seq_n_samples):
             axes[2 * n, 0].set_ylabel('gt #{:d}'.format(n))
             axes[2 * n + 1, 0].set_ylabel('rec #{:d}'.format(n))
 
@@ -212,7 +212,7 @@ class ProgressFig(object):
             n_timesteps = res.obs.shape[0]
             ts = np.random.choice(n_timesteps, size=self.n_samples, replace=True)
 
-        for k, v in res.iteritems():
+        for k, v in res.items():
             if v.shape[-1] == 1:
                 v = v[..., 0]
 
@@ -232,12 +232,10 @@ class ProgressFig(object):
         return plt.subplots(h, w, figsize=figsize)
 
     def _cmap(self, obs, with_time=True):
-
         ndims = len(obs.shape)
         cmap = None
         if ndims == (3 + with_time) or (ndims == (4 + with_time) and obs.shape[-1] == 1):
             cmap = 'gray'
-            
         return cmap
 
 
@@ -265,7 +263,7 @@ def make_logger(model, sess, writer, train_tensor, num_train_batches, test_tenso
         'normalised_iwae': lambda: model.normalised_elbo_iwae,
     }
 
-    for k, expr in maybe_exprs.iteritems():
+    for k, expr in maybe_exprs.items():
         try:
             exprs[k] = expr()
         except AttributeError:
@@ -291,11 +289,11 @@ def make_logger(model, sess, writer, train_tensor, num_train_batches, test_tenso
         def log(train_itr):
             train_log(train_itr)
             test_log(train_itr)
-            print
+            print()
     else:
         def log(train_itr):
             test_log(train_itr)
-            print
+            print()
 
     return log
 
@@ -334,10 +332,10 @@ def make_expr_logger(sess, num_batches, expr_dict, name, data_dict=None,
         try:
             return make_log_string(itr, l, t)
         except ValueError as err:
-            print err.message
-            print '\tLogging items'
-            for k, v in l.iteritems():
-                print '{}: {}'.format(k, type(v))
+            print(err.message)
+            print('\tLogging items')
+            for k, v in l.items():
+                print('{}: {}'.format(k, type(v)))
 
     def logger(itr=0, num_batches_to_eval=None, write=True, writer=writer):
         l = {k: 0. for k in expr_dict}
@@ -345,26 +343,26 @@ def make_expr_logger(sess, num_batches, expr_dict, name, data_dict=None,
         if num_batches_to_eval is None:
             num_batches_to_eval = num_batches
 
-        for i in xrange(num_batches_to_eval):
+        for i in range(num_batches_to_eval):
             if data_dict is not None:
-                vals = sess.run(data_dict.values())
-                feed_dict = {k: v for k, v in zip(data_dict.keys(), vals)}
+                vals = sess.run(list(data_dict.values()))
+                feed_dict = {k: v for k, v in zip(list(data_dict.keys()), vals)}
                 if constants_dict:
                     feed_dict.update(constants_dict)
             else:
                 feed_dict = constants_dict
 
             r = sess.run(expr_dict, feed_dict)
-            for k, v in r.iteritems():
+            for k, v in r.items():
                 l[k] += v
 
-        for k, v in l.iteritems():
+        for k, v in l.items():
             l[k] /= num_batches_to_eval
         t = time.time() - start
-        print log(itr, l, t)
+        print(log(itr, l, t))
 
         if writer is not None and write:
-            log_values(writer, itr, [tags[k] for k in l.keys()], l.values())
+            log_values(writer, itr, [tags[k] for k in list(l.keys())], list(l.values()))
 
         return l
 
@@ -405,8 +403,8 @@ def log_norm(expr_list, name):
 def log_values(writer, itr, tags=None, values=None, dict=None):
     if dict is not None:
         assert tags is None and values is None
-        tags = dict.keys()
-        values = dict.values()
+        tags = list(dict.keys())
+        values = list(dict.values())
     else:
 
         if not nest.is_sequence(tags):
@@ -442,7 +440,7 @@ def gradient_summaries(gvs, norm=True, ratio=True, histogram=True):
         for g, v in gvs:
             var_name = v.name.split(':')[0]
             if g is None:
-                print 'Gradient for variable {} is None'.format(var_name)
+                print('Gradient for variable {} is None'.format(var_name))
                 continue
 
             if ratio:

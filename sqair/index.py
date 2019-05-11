@@ -27,7 +27,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.util import nest
 
-from ops import broadcast_against
+from dps.utils.tf import tf_shape
+
+from sqair.ops import broadcast_against
 
 
 def sample_from_1d_tensor(arr, idx):
@@ -113,10 +115,7 @@ def tile_input_for_iwae(tensor, iw_samples, with_time=False):
     :param with_time: boolean, if true than an additional axis at the beginning is assumed
     :return:
     """
-
-    shape = tensor.shape.as_list()
-    if with_time:
-        shape[0] = tf.shape(tensor)[0]
+    shape = list(tf_shape(tensor))
     shape[with_time] *= iw_samples
 
     tiles = [1, iw_samples] + [1] * (tensor.shape.ndims - (1 + with_time))
@@ -188,7 +187,7 @@ def select_present_nested(tensors, presence, batch_size=None, name='select_prese
         merged = select_present(merged, presence, batch_size)
         tensors = []
 
-        for i in xrange(len(lens) - 1):
+        for i in range(len(lens) - 1):
             st, ed = lens[i], lens[i + 1]
             tensors.append(merged[..., st:ed])
 
@@ -204,8 +203,8 @@ def compute_object_ids(last_used_id, prev_ids, propagated_pres, discovery_pres):
     :param discovery_pres: Tensor of presence variables for newely discovered objects.
     :return: Maximum id used so far, new ids of all present objects
     """
-    last_used_id, prev_ids, propagated_pres, discovery_pres = [tf.convert_to_tensor(i) for i in (
-    last_used_id, prev_ids, propagated_pres, discovery_pres)]
+    last_used_id, prev_ids, propagated_pres, discovery_pres = [
+        tf.convert_to_tensor(i) for i in (last_used_id, prev_ids, propagated_pres, discovery_pres)]
     prop_ids = prev_ids * propagated_pres - (1 - propagated_pres)
 
     # each object gets a new id

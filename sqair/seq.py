@@ -33,9 +33,9 @@ from tensorflow.python.util import nest
 
 from attrdict import AttrDict
 
-from core import BaseSQAIRCore
-from sqair_modules import SQAIRTimestep, PropagateOnlyTimestep
-from modules import SpatialTransformer
+from sqair.core import BaseSQAIRCore
+from sqair.sqair_modules import SQAIRTimestep, PropagateOnlyTimestep
+from sqair.modules import SpatialTransformer
 
 
 class SequentialAIR(snt.AbstractModule):

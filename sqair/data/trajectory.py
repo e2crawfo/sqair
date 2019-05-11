@@ -25,9 +25,7 @@ import abc
 import numpy as np
 
 
-class Trajectory(object):
-    __metaclass__ = abc.ABCMeta
-
+class Trajectory(object, metaclass=abc.ABCMeta):
     def __init__(self, n_dim, n_state, bounds=None):
         super(Trajectory, self).__init__()
 
@@ -94,7 +92,7 @@ class Trajectory(object):
             tjs[0] = init_from
             state[:, :self._n_dim] = init_from.copy()
 
-        for t in xrange(1, n_timesteps):
+        for t in range(1, n_timesteps):
             tjs[t], state = self.forward(state)
 
         tjs = tjs.squeeze()
@@ -130,7 +128,7 @@ class NoisyAccelerationTrajectory(Trajectory):
         acc += acc_noise
 
         if self._bounce:
-            for d in xrange(self._n_dim):
+            for d in range(self._n_dim):
                 too_small = np.less(pos[:, d], self._bounds[d, 0])
                 too_big = np.greater(pos[:, d], self._bounds[d, 1])
 
@@ -145,10 +143,10 @@ class NoisyAccelerationTrajectory(Trajectory):
 
 if __name__ == '__main__':
     path = NoisyAccelerationTrajectory(1, 2, [[0, 20], [0, 60]], 5, 5, True)
-    print path._bounds[0]
+    print(path._bounds[0])
     p, presence = path.create(100, 1, with_presence=True)
-    print p.shape
-    print p
-    print presence
+    print(p.shape)
+    print(p)
+    print(presence)
 
 

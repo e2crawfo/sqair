@@ -32,8 +32,8 @@ from tensorflow.contrib.resampler import resampler as tf_resampler
 
 import sonnet as snt
 
-from neural import MLP, ConvNet
-import ops
+from sqair.neural import MLP, ConvNet
+from sqair import ops
 
 
 class GaussianFromParamVec(snt.AbstractModule):
@@ -188,7 +188,6 @@ class SpatialTransformer(snt.AbstractModule):
         :param logits: Tensor of logits; they are converted to ST space.
         :return: Tensor of transformed images.
         """
-
         if sentinel is not None:
             raise ValueError('Either coords or logits must be given by kwargs!')
 
@@ -292,6 +291,8 @@ class AIRGlimpse(snt.AbstractModule):
         :param inverse: Boolean; see SpatialTransformer for details.
         """
 
+        h, w, *self.img_depth = img_size
+        img_size = h, w
         super(AIRGlimpse, self).__init__()
         self._glimpse_size = glimpse_size
         self._transformer = SpatialTransformer(img_size, glimpse_size, inverse=inverse)
@@ -332,7 +333,6 @@ class AIREncoder(AIRGlimpse):
             before encoding it.
         :return: what_distrib, glimpses.
         """
-
         if where is not None:
             coords = self.to_coords(where)
 
@@ -394,7 +394,7 @@ class AIRDecoder(AIRGlimpse):
         self._mean_img = mean_img
 
         with self._enter_variable_scope():
-            self._glimpse_decoder = glimpse_decoder(glimpse_size)
+            self._glimpse_decoder = glimpse_decoder((*glimpse_size, *self.img_depth))
             if self._mean_img is not None:
                 self._mean_img = tf.Variable(self._mean_img, dtype=tf.float32, trainable=True)
                 self._mean_img = tf.expand_dims(self._mean_img, 0)
@@ -417,8 +417,10 @@ class AIRDecoder(AIRGlimpse):
                     value -= min_std
 
                 value = np.sqrt(value)
-                value = tf.get_variable(name, shape=[], dtype=tf.float32, initializer=tf.constant_initializer(value),
-                                            trainable=is_learnable)
+                value = tf.get_variable(
+                    name, shape=[], dtype=tf.float32,
+                    initializer=tf.constant_initializer(value), trainable=is_learnable)
+
                 value **= 2.
                 if min_std != 0.:
                     value += offset
@@ -445,7 +447,6 @@ class AIRDecoder(AIRGlimpse):
         return tf.reduce_sum(inversed, axis=-4)
 
     def _build(self, what, where=None, presence=None):
-
         glimpse = self._batch(self._glimpse_decoder)(what)
         canvas = self._decode(glimpse, presence, where)
         canvas, written_to_mask = self._add_mean_image(canvas, presence, where)
@@ -462,7 +463,7 @@ class AIRDecoder(AIRGlimpse):
         non_zero_mask = tf.nn.sigmoid(-10. + non_zero_mask * 20.)
 
         if self._mean_img is not None:
-                canvas += self._mean_img * non_zero_mask
+            canvas += self._mean_img * non_zero_mask
 
         return canvas, non_zero_mask
 
@@ -574,12 +575,12 @@ class RecurrentNormalImpl(snt.AbstractModule):
             state = tf.concat((state, conditioning), -1)
             state = self._cond_state(state)
 
-        outputs = [[] for _ in xrange(4)]
+        outputs = [[] for _ in range(4)]
         if override_samples is not None:
             override_samples = tf.unstack(override_samples, axis=-2)
             seq_len = len(override_samples)
 
-        for i in xrange(seq_len):
+        for i in range(seq_len):
 
             if override_samples is None:
                 override_sample = None

@@ -23,13 +23,12 @@
 
 import os
 import numpy as np
-import cPickle as pickle
+import pickle as pickle
 from tensorflow.python.util import nest
 
-from trajectory import NoisyAccelerationTrajectory
-from template import TemplateDataset
-
-from data import create_mnist, _MNIST_PATH
+from sqair.data.trajectory import NoisyAccelerationTrajectory
+from sqair.data.template import TemplateDataset
+from sqair.data.data import create_mnist, _MNIST_PATH
 
 
 def trajectory_from_coords(coords, n_timesteps, canvas_size=None, template_size=None,
@@ -78,7 +77,7 @@ def fix_data(data_dict, trajectories, img_seq):
     n_timesteps, n_samples = img_seq.shape[:2]
     coords = np.zeros((n_timesteps, n_samples, n_max, 4))
     for i, coord in enumerate(trajectories):
-        for num in xrange(nums[0, i]):
+        for num in range(nums[0, i]):
             coords[:, i, num, :2] = trajectories[i][num]
             coords[:, i, num, 2:] = data_dict['templates'][i][num].shape
     data_dict['coords'] = coords
@@ -86,9 +85,11 @@ def fix_data(data_dict, trajectories, img_seq):
     data['imgs'] = img_seq
     del data['templates']
 
+
 if __name__ == '__main__':
     partitions = ['train', 'validation']
-    nums = [60000, 10000]
+    nums = [600, 100]
+    # nums = [60000, 10000]
     # nums = [n//100 for n in nums]
 
     name = 'seq_mnist'
@@ -106,8 +107,8 @@ if __name__ == '__main__':
     include_coords = True
 
     for p, n in zip(partitions, nums):
-        print 'Processing partition "{}"'.format(p)
-        print 'Creating static data'
+        print('Processing partition "{}"'.format(p))
+        print('Creating static data')
         data = create_mnist(p, canvas_size, obj_size, n_objects,
                             n_samples=n,
                             fraction_outside_canvas=init_fraction_outside_canvas,
@@ -115,7 +116,7 @@ if __name__ == '__main__':
                             include_templates=include_templates
                             )
 
-        print 'Creating sequences'
+        print('Creating sequences')
         tjs = trajectory_from_coords(data['coords'], n_timesteps, canvas_size,
                                      obj_size, overlap)
 
@@ -126,6 +127,6 @@ if __name__ == '__main__':
         filename = '{}_{}.pickle'.format(name, p)
         filename = os.path.join(_MNIST_PATH, filename)
 
-        print 'saving to "{}"'.format(filename)
-        with open(filename, 'w') as f:
+        print('saving to "{}"'.format(filename))
+        with open(filename, 'wb') as f:
             pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)

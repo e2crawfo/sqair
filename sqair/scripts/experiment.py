@@ -131,7 +131,7 @@ if F.schedule:
     schedule = schedule * F.train_itr / schedule[-1]
     schedule = list(np.round(schedule).astype(np.int32))
     lrs = list(lr * (1./3) ** np.arange(len(schedule)))
-    print lrs, schedule
+    print(lrs, schedule)
     lr = tf.train.piecewise_constant(global_step, schedule[:-1], lrs)
     tf.summary.scalar('learning_rate', lr)
 
@@ -164,7 +164,7 @@ except AttributeError:
 
 saver = tf.train.Saver(max_to_keep=10000)
 if resume_checkpoint is not None:
-    print "Restoring checkpoint from '{}'".format(resume_checkpoint)
+    print("Restoring checkpoint from '{}'".format(resume_checkpoint))
     saver.restore(sess, resume_checkpoint)
 
 
@@ -181,7 +181,7 @@ for k in maybe_report:
     try:
         report[k] = getattr(model, k)
     except AttributeError:
-        print 'Skipping report: "{}"'.format(k)
+        print('Skipping report: "{}"'.format(k))
 
 # Logging
 ax = data_dict['axes']['imgs']
@@ -207,7 +207,7 @@ def try_plot(itr):
         summary_writer.add_summary(summaries, train_itr)
 
 train_itr = sess.run(global_step)
-print 'Starting training at iter = {}'.format(train_itr)
+print('Starting training at iter = {}'.format(train_itr))
 
 if F.log_at_start or train_itr == 0:
     log(train_itr)
@@ -218,7 +218,7 @@ while train_itr < F.train_itr:
     l, train_itr, _ = sess.run([report, global_step, train_step])
 
     if train_itr % F.report_loss_every == 0:
-        print '{}: {}'.format(train_itr, str(l)[1:-1].replace('\'=', ''))
+        print('{}: {}'.format(train_itr, str(l)[1:-1].replace('\'=', '')))
         summaries = sess.run(all_summaries)
         summary_writer.add_summary(summaries, train_itr)
 

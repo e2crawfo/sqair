@@ -32,9 +32,9 @@ from tensorflow.python.util import nest
 
 import orderedattrdict
 
-from modules import SpatialTransformer, AffineDiagNormal, GaussianFromParamVec
-from neural import MLP, Nonlinear
-import nested
+from sqair.modules import SpatialTransformer, AffineDiagNormal, GaussianFromParamVec
+from sqair.neural import MLP, Nonlinear
+from sqair import nested
 
 
 class BaseSQAIRCore(snt.RNNCore):
@@ -158,7 +158,7 @@ class DiscoveryCore(BaseSQAIRCore):
         where = tf.zeros((1, 1, 4))
         presence = tf.zeros((1, 1, 1))
         presence_logit = tf.zeros((1, 1, 1))
-        z0 = [tf.tile(i, (batch_size, n_steps, 1)) for i in what, where, presence, presence_logit]
+        z0 = [tf.tile(i, (batch_size, n_steps, 1)) for i in (what, where, presence, presence_logit)]
         return z0
 
     def _prepare_rnn_inputs(self, inpt, img, what, where, presence):
@@ -189,8 +189,10 @@ class DiscoveryCore(BaseSQAIRCore):
             1  # presence_logit
         ]
 
-    def _build(self, (inpt, is_allowed), (img_flat, what_code, where_code, presence, hidden_state)):
+    def _build(self, xxx_todo_changeme, xxx_todo_changeme1):
         """Input is unused; it's only to force a maximum number of steps"""
+        (inpt, is_allowed) = xxx_todo_changeme
+        (img_flat, what_code, where_code, presence, hidden_state) = xxx_todo_changeme1
         img = tf.reshape(img_flat, (-1,) + tuple(self._img_size))
 
         with tf.variable_scope('rnn_inpt'):
@@ -277,9 +279,9 @@ class PropagationCore(BaseSQAIRCore):
             self._temporal_cell.state_size,
         ]
 
-    def _build(self, (z_tm1, temporal_hidden_state), state):
+    def _build(self, xxx_todo_changeme2, state):
         """Input is unused; it's only to force a maximum number of steps"""
-        # same object, previous timestep
+        (z_tm1, temporal_hidden_state) = xxx_todo_changeme2
         what_tm1, where_tm1, presence_tm1, presence_logit_tm1 = z_tm1
         temporal_state = nest.flatten(temporal_hidden_state)[-1]
 

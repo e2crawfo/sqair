@@ -31,12 +31,12 @@ from tensorflow.python.util import nest
 
 import orderedattrdict
 
-from core import DiscoveryCore
-from modules import ConditionedNormalAdaptor, RecurrentNormal
-from neural import MLP
-import index
-import nested
-from prior import NumStepsDistribution
+from sqair.core import DiscoveryCore
+from sqair.modules import ConditionedNormalAdaptor, RecurrentNormal
+from sqair.neural import MLP
+from sqair import index
+from sqair import nested
+from sqair.prior import NumStepsDistribution
 
 
 class BaseSQAIRModule(snt.AbstractModule):
@@ -133,7 +133,7 @@ class Discover(BaseSQAIRModule):
             conditioning = tf.zeros((int(img.shape[0]), 1))
 
         seq_len_inpt = []
-        for t in xrange(self._n_steps):
+        for t in range(self._n_steps):
             exists = tf.greater(max_disc_steps, t)
             seq_len_inpt.append(tf.expand_dims(tf.to_float(exists), -1))
 
@@ -182,7 +182,7 @@ class Discover(BaseSQAIRModule):
         prior_log_probs = [distrib.log_prob(sample, **kw) for (distrib, sample, kw) in zip(priors, samples, kwargs)]
 
         for probs in (posterior_log_probs, prior_log_probs):
-            for i in xrange(2):
+            for i in range(2):
                 probs[i] = tf.reduce_sum(probs[i], -1) * squeezed_presence
 
         o.q_z_given_x = self._reduce_prob(posterior_log_probs)
@@ -308,7 +308,7 @@ class Propagate(BaseSQAIRModule):
         o.prop_prob = tf.exp(posterior_log_probs[-1]) * presence_tm1
 
         for probs in (posterior_log_probs, prior_log_probs):
-            for i in xrange(2):
+            for i in range(2):
                 if probs[i].shape.ndims == 3:
                     probs[i] = tf.reduce_sum(probs[i], -1)
 
@@ -550,7 +550,7 @@ class SQAIRTimestep(AbstractTimstepModule):
             nested.concat([prop_prior_rnn_state, self.initial_prior_state(batch_size)], -2)
 
         # concat prop and disc outputs along the object axis, in that order
-        outputs = [o.hidden_outputs.values() for o in (prop_output, disc_output)]
+        outputs = [list(o.hidden_outputs.values()) for o in (prop_output, disc_output)]
         hidden_outputs = [tf.concat((p, d), -2) for p, d in zip(*outputs)]
         hidden_outputs = DiscoveryCore.outputs_by_name(hidden_outputs, stack=False)
 

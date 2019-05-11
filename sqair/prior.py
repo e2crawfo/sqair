@@ -27,8 +27,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.distributions as tfd
 
-from ops import clip_preserve
-from index import sample_from_tensor
+from sqair.ops import clip_preserve
+from sqair.index import sample_from_tensor
 
 
 def _cumprod(tensor, axis=0):

@@ -40,7 +40,7 @@ def make_prior(name, *args, **kwargs):
     }
 
     if name not in prior_map:
-        raise ValueError('Invalid prior type: "{}". Choose from {}.'.format(name, prior_map.keys()))
+        raise ValueError('Invalid prior type: "{}". Choose from {}.'.format(name, list(prior_map.keys())))
 
     return prior_map[name](*args, **kwargs)
 
@@ -110,9 +110,10 @@ class PropagatePrior(snt.AbstractModule):
 
         return init_state
 
-    def make_distribs(self, (prior_where_loc, prior_where_scale, prior_what_loc, prior_what_scale, prop_prob_logit)):
+    def make_distribs(self, xxx_todo_changeme):
         """Converts parameters return by `_build` into probability distributions.
         """
+        (prior_where_loc, prior_where_scale, prior_what_loc, prior_what_scale, prop_prob_logit) = xxx_todo_changeme
         what_prior = Normal(prior_what_loc, prior_what_scale)
         where_prior = Normal(prior_where_loc, prior_where_scale)
         prop_prior = Bernoulli(logits=tf.squeeze(prop_prob_logit, -1))
@@ -168,9 +169,9 @@ class SequentialSSM(snt.AbstractModule):
     def _build(self, img, z_tm1, temporal_hidden_state):
 
         initial_state = self._cell.initial_state(img)
-        unstacked_z_tm1 = zip(*[tf.unstack(z, axis=-2) for z in z_tm1])
+        unstacked_z_tm1 = list(zip(*[tf.unstack(z, axis=-2) for z in z_tm1]))
         unstacked_temp_state = tf.unstack(temporal_hidden_state, axis=-2)
-        inpt = zip(unstacked_z_tm1, unstacked_temp_state)
+        inpt = list(zip(unstacked_z_tm1, unstacked_temp_state))
 
         hidden_outputs, hidden_state = tf.nn.static_rnn(self._cell, inpt, initial_state)
         hidden_outputs = self._cell.outputs_by_name(hidden_outputs)

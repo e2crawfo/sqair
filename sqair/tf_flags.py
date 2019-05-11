@@ -39,9 +39,9 @@ The experiment framework relies on the internals of this implementation, hence i
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+
+
+
 
 import argparse as _argparse
 
@@ -62,7 +62,7 @@ class _FlagValues(object):
 
     def _parse_flags(self, args=None):
         result, unparsed = _global_parser.parse_known_args(args=args)
-        for flag_name, val in vars(result).items():
+        for flag_name, val in list(vars(result).items()):
             self.__dict__['__flags'][flag_name] = val
         self.__dict__['__parsed'] = True
         return unparsed

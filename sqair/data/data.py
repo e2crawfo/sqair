@@ -25,7 +25,7 @@ import os
 import sys
 import numpy as np
 import itertools
-import cPickle as pickle
+import pickle as pickle
 
 import tensorflow as tf
 from tensorflow.python.util import nest
@@ -113,10 +113,10 @@ def create_mnist(partition='train', canvas_size=(50, 50), obj_size=(28, 28), n_o
 
     i = 0
     n_tries = 5
-    print 'Creating {} samples'.format(n_samples)
+    print('Creating {} samples'.format(n_samples))
     while i < n_samples:
         if i % 500 == 0:
-            print '\r{} / {}'.format(i, n_samples),
+            print('\r{} / {}'.format(i, n_samples), end=' ')
             sys.stdout.flush()
 
         tries = 0
@@ -128,7 +128,7 @@ def create_mnist(partition='train', canvas_size=(50, 50), obj_size=(28, 28), n_o
             indices = np.random.choice(n_templates, n, replace=False)
 
             occupancy[...] = False
-            for j in xrange(n):
+            for j in range(n):
                 idx = indices[j]
                 labels[i, j] = mnist_data.labels[idx]
 
@@ -168,7 +168,7 @@ def create_mnist(partition='train', canvas_size=(50, 50), obj_size=(28, 28), n_o
         else:
             imgs[i, ...] = 0.
 
-    print '\nfinished'
+    print('\nfinished')
     if expand_nums:
         expanded = np.zeros((max_objects + 1, n_samples, 1), dtype=np.uint8)
         for i, n in enumerate(nums):
@@ -193,7 +193,7 @@ def load_data(path, dataset=MNIST, data_path=None):
 
     path = os.path.join(data_path, path)
 
-    with open(path) as f:
+    with open(path, 'rb') as f:
         data = pickle.load(f)
 
     data['imgs'] = data['imgs'].astype(np.float32) / 255.
@@ -202,7 +202,7 @@ def load_data(path, dataset=MNIST, data_path=None):
 
 
 def tensors_from_data(data_dict, batch_size, axes=None, shuffle=False):
-    keys = data_dict.keys()
+    keys = list(data_dict.keys())
     if axes is None:
         axes = {k: 0 for k in keys}
 
@@ -215,7 +215,7 @@ def tensors_from_data(data_dict, batch_size, axes=None, shuffle=False):
             return np.random.choice(n_entries, batch_size)
 
     else:
-        rolling_idx = itertools.cycle(xrange(0, n_entries - batch_size + 1, batch_size))
+        rolling_idx = itertools.cycle(range(0, n_entries - batch_size + 1, batch_size))
 
         def idx_fun():
             start = next(rolling_idx)
@@ -253,13 +253,13 @@ if __name__ == '__main__':
     include_coords = False
 
     for p, n in zip(partitions, nums):
-        print 'Processing partition "{}"'.format(p)
+        print('Processing partition "{}"'.format(p))
         data = create_mnist(p, canvas_size, obj_size, n_objects, n_samples=n,
                             include_coords=include_coords, include_templates=include_templates)
 
         filename = 'new_mnist_{}.pickle'.format(p)
         filename = os.path.join(_MNIST_PATH, filename)
     
-        print 'saving to "{}"'.format(filename)
+        print('saving to "{}"'.format(filename))
         with open(filename, 'w') as f:
             pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)

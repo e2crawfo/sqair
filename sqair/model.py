@@ -25,9 +25,9 @@
 """
 import tensorflow as tf
 
-import index
-import ops
-import targets
+from sqair import index
+from sqair import ops
+from sqair import targets
 
 
 class Model(object):
@@ -102,7 +102,6 @@ class Model(object):
         self.iw_distrib = tf.distributions.Categorical(probs=self.importance_weights)
         self.iw_resampling_idx = self.iw_distrib.sample()
 
-
         # Logging
         self._log_resampled(self.data_ll_per_sample, 'data_ll')
         self._log_resampled(self.log_p_z_per_sample, 'log_p_z')
@@ -123,6 +122,7 @@ class Model(object):
         if hasattr(self, 'num_steps_per_sample'):
             self._log_resampled(self.num_steps_per_sample, 'num_steps')
 
+        import pdb; pdb.set_trace()
         if self.gt_presence is not None:
             self.gt_num_steps = tf.reduce_sum(self.gt_presence, -1)
 
