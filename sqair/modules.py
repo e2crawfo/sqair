@@ -471,7 +471,7 @@ class AIRDecoder(AIRGlimpse):
 class StepsPredictor(snt.AbstractModule):
     """Computes the probability logit for discovering or propagating an object."""
 
-    def __init__(self, n_hidden, steps_bias=0., max_rel_logit_change=np.inf, max_logit_change=np.inf, **kwargs):
+    def __init__(self, n_hidden, steps_bias=0., max_rel_logit_change=np.inf, max_logit_change=np.inf, training_wheels=None, **kwargs):
         """
 
         :param n_hidden:
@@ -484,6 +484,7 @@ class StepsPredictor(snt.AbstractModule):
         self._steps_bias = steps_bias
         self._max_rel_logit_change = max_rel_logit_change
         self._bernoulli = lambda logits: tfd.Bernoulli(logits=logits, dtype=tf.float32, **kwargs)
+        self.training_wheels = training_wheels if training_wheels is not None else 0.
 
         with self._enter_variable_scope():
 
@@ -499,13 +500,12 @@ class StepsPredictor(snt.AbstractModule):
 
             if max_logit_change != np.inf:
                 max_logit_change = tf.get_variable('max_logit_change',
-                                                       shape=[],
-                                                       initializer=tf.constant_initializer(max_logit_change),
-                                                       trainable=False)
+                                                   shape=[],
+                                                   initializer=tf.constant_initializer(max_logit_change),
+                                                   trainable=False)
             self._max_logit_change = max_logit_change
 
-    def _build(self, previous_presence, previois_logit, *features):
-
+    def _build(self, previous_presence, previous_logit, *features):
         init = {'b': tf.constant_initializer(self._steps_bias)}
         mlp = MLP(self._n_hidden, n_out=1, output_initializers=init)
 
@@ -513,14 +513,16 @@ class StepsPredictor(snt.AbstractModule):
         logit = mlp(features)
         logit = previous_presence * logit + (previous_presence - 1.) * 88.
 
-        if previois_logit is not None:
+        if previous_logit is not None:
             if self._max_rel_logit_change != np.inf:
-                min_logit = (1. - self._max_rel_logit_change) * previois_logit
-                max_logit = (1. + self._max_rel_logit_change) * previois_logit
+                min_logit = (1. - self._max_rel_logit_change) * previous_logit
+                max_logit = (1. + self._max_rel_logit_change) * previous_logit
                 logit = tf.clip_by_value(logit, min_logit, max_logit)
 
             elif self._max_logit_change != np.inf:
-                logit = previois_logit + self._max_logit_change * tf.nn.tanh(logit)
+                logit = previous_logit + self._max_logit_change * tf.nn.tanh(logit)
+
+        logit = self.training_wheels * tf.stop_gradient(logit) + (1-self.training_wheels) * logit
 
         return self._bernoulli(logit)
 

@@ -32,6 +32,8 @@ from tensorflow.python.util import nest
 
 import orderedattrdict
 
+from dps import cfg
+
 from sqair.modules import SpatialTransformer, AffineDiagNormal, GaussianFromParamVec
 from sqair.neural import MLP, Nonlinear
 from sqair import nested
@@ -50,8 +52,7 @@ class BaseSQAIRCore(snt.RNNCore):
 
     def __init__(self, img_size, crop_size, n_what,
                  transition, input_encoder, glimpse_encoder, transform_estimator, steps_predictor,
-                 where_loc_bias=None,
-                 debug=False):
+                 where_loc_bias=None, debug=False, training_wheels=None):
         """Creates the cell
 
         :param img_size: int tuple, size of the image
@@ -72,6 +73,7 @@ class BaseSQAIRCore(snt.RNNCore):
         self._n_what = n_what
         self._cell = transition
         self._n_hidden = int(self._cell.output_size[0])
+        self.training_wheels = training_wheels if training_wheels is not None else 0.
 
         self._where_loc_bias = where_loc_bias
 
@@ -206,11 +208,13 @@ class DiscoveryCore(BaseSQAIRCore):
             what_code, what_loc, what_scale = self._compute_what(img, where_code)
 
         with tf.variable_scope('presence'):
-            presence, presence_prob, presence_logit\
-                = self._compute_presence(presence, None, hidden_output, what_code)
+            presence, presence_prob, presence_logit = self._compute_presence(presence, None, hidden_output, what_code)
 
-        output = [what_code, what_loc, what_scale, where_code, where_loc, where_scale,
-                  presence_prob, presence, presence_logit]
+        output = [
+            what_code, what_loc, what_scale,
+            where_code, where_loc, where_scale,
+            presence_prob, presence, presence_logit
+        ]
         new_state = [img_flat, what_code, where_code, presence, hidden_state]
 
         return output, new_state
@@ -223,6 +227,9 @@ class DiscoveryCore(BaseSQAIRCore):
         loc, scale = self._transform_estimator(hidden_output)
         if self._where_loc_bias is not None:
             loc += np.asarray(self._where_loc_bias).reshape((1, 4))
+
+        loc = self.training_wheels * tf.stop_gradient(loc) + (1-self.training_wheels) * loc
+        scale = self.training_wheels * tf.stop_gradient(scale) + (1-self.training_wheels) * scale
 
         scale = tf.nn.softplus(scale) + 1e-2
         where_distrib = tfd.Normal(loc, scale, validate_args=self._debug, allow_nan_stats=not self._debug)
@@ -242,7 +249,7 @@ class PropagationCore(BaseSQAIRCore):
 
     def __init__(self, img_size, crop_size, n_what,
                  transition, input_encoder, glimpse_encoder, transform_estimator, steps_predictor, temporal_cell,
-                 where_update_scale=1.0, debug=False):
+                 where_update_scale=1.0, debug=False, training_wheels=None):
         """Initialises the model.
 
         If argument is not covered here, see BaseSQAIRCore for documentation.
@@ -253,7 +260,7 @@ class PropagationCore(BaseSQAIRCore):
 
         super(PropagationCore, self).__init__(img_size, crop_size, n_what, transition, input_encoder,
                                               glimpse_encoder, transform_estimator, steps_predictor,
-                                              debug=debug)
+                                              debug=debug, training_wheels=training_wheels)
 
         self._temporal_cell = temporal_cell
         with self._enter_variable_scope():
@@ -327,6 +334,9 @@ class PropagationCore(BaseSQAIRCore):
 
         loc = where_tm1 + self._where_update_scale * loc
         scale = tf.nn.softplus(scale - 1.) + 1e-2
+
+        loc = self.training_wheels * tf.stop_gradient(loc) + (1-self.training_wheels) * loc
+        scale = self.training_wheels * tf.stop_gradient(scale) + (1-self.training_wheels) * scale
 
         where_distrib = self._where_distrib(loc, scale)
         where_sample = where_distrib.sample()

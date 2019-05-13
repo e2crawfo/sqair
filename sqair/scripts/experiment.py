@@ -40,7 +40,7 @@ from sqair import tf_flags as flags
 
 flags.DEFINE_string('data_config', 'configs/orig_seq_mnist.py', 'Path to a data config file.')
 flags.DEFINE_string('model_config', 'configs/mlp_mnist_model.py', 'Path to a model config file.')
-flags.DEFINE_string('results_dir', '../checkpoints', 'Top directory for all experimental results.')
+flags.DEFINE_string('results_dir', '../results', 'Top directory for all experimental results.')
 flags.DEFINE_string('run_name', 'test_run', 'Name of this job. Results will be stored in a corresponding folder.')
 
 flags.DEFINE_integer('batch_size', 32, '')
@@ -144,7 +144,6 @@ elif opt == 'sgd':
     opt = tf.train.GradientDescentOptimizer(lr)
 elif opt == 'momentum':
     opt = tf.train.MomentumOptimizer(lr, momentum=.9)
-
 
 # Optimisation target
 target, gvs = model.make_target(opt, n_train_itr=F.train_itr, l2_reg=F.l2)

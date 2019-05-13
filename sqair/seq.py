@@ -138,9 +138,9 @@ class SequentialAIR(snt.AbstractModule):
         canvas_size = list(img_size[:2])
         glimpse_size = list(self._glimpse_size)
 
-        if n_channels != 1:
-            canvas_size.append(n_channels)
-            glimpse_size.append(n_channels)
+        # if n_channels != 1:
+        canvas_size.append(n_channels)
+        glimpse_size.append(n_channels)
 
         make_ta('canvas', canvas_size)
         make_ta('glimpse', [self._max_steps] + glimpse_size)
@@ -251,7 +251,7 @@ class SequentialAIR(snt.AbstractModule):
         ]
 
         for i, (ta, output) in enumerate(zip(tas, outputs)):
-            if int(output.shape[-1]) == 1:
+            if int(output.shape[-1]) == 1 and len(output.shape) < 4:
                 output = tf.squeeze(output, -1)
 
             tas[i] = ta.write(t, output)

@@ -94,6 +94,7 @@ class ProgressFig(object):
         self.height, self.width = air.img_size[:2]
 
     def plot_all(self, global_step=None, save=True):
+        print("in plot all")
         self.plot_still(global_step, save)
         self.plot_seq(global_step, save)
 
@@ -139,7 +140,6 @@ class ProgressFig(object):
         self._maybe_save_fig(fig, global_step, save, 'still_fig')
 
     def plot_seq(self, global_step=None, save=True):
-
         o, n_timesteps = self._air_outputs(n_samples=self.seq_n_samples)
         fig, axes = self._make_fig(2 * self.seq_n_samples, n_timesteps)
         axes = axes.reshape((2 * self.seq_n_samples, n_timesteps))

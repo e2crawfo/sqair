@@ -106,7 +106,6 @@ class Discover(BaseSQAIRModule):
             conditional generation from a few observations (i.e. prediction).
         :return: AttrDict of results.
         """
-
         max_disc_steps = self._n_steps - n_present_obj
 
         hidden_outputs, num_steps = self._discover(img, max_disc_steps, conditioning_from_prop, time_step)
@@ -203,7 +202,13 @@ class Discover(BaseSQAIRModule):
         is_first_timestep = tf.to_float(tf.equal(time_step, 0))
 
         if self._disc_prior_type == 'geom':
-            num_steps_prior = tfd.Geometric(probs=1. - self._init_disc_step_success_prob)
+            support = tf.cast(tf.range(self._n_steps + 1), tf.float32)
+            p = self._init_disc_step_success_prob
+            probs = p ** support * (1-p)
+            probs = probs / tf.maximum(tf.reduce_sum(probs), 1e-6)
+            num_steps_prior = tfd.Categorical(probs=probs)
+
+            # num_steps_prior = tfd.Geometric(probs=1. - self._init_disc_step_success_prob)
 
         elif self._disc_prior_type == 'cat':
             init = [0.] * (self._n_steps + 1)

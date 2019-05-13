@@ -110,8 +110,6 @@ class Model(object):
 
         # Mean squared error between inpt and mean of output distribution
         inpt_obs = self.tiled_obs
-        if inpt_obs.shape[-1] == 1:
-            inpt_obs = tf.squeeze(inpt_obs, -1)
 
         axes = [0] + list(range(inpt_obs.shape.ndims)[2:])
         self.mse_per_sample = tf.reduce_mean((inpt_obs - self.canvas) ** 2, axes)
@@ -122,7 +120,6 @@ class Model(object):
         if hasattr(self, 'num_steps_per_sample'):
             self._log_resampled(self.num_steps_per_sample, 'num_steps')
 
-        import pdb; pdb.set_trace()
         if self.gt_presence is not None:
             self.gt_num_steps = tf.reduce_sum(self.gt_presence, -1)
 
