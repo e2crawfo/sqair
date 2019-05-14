@@ -140,8 +140,8 @@ class BaseSQAIRCore(snt.RNNCore):
         init_presence = tf.ones((batch_size, 1), dtype=tf.float32) * self._init_presence_value
         return [flat_img, what_code, where_code, init_presence, hidden_state]
 
-    def _compute_presence(self, previous_presence, presence_logit, *features):
-        presence_distrib = self._steps_predictor(previous_presence, presence_logit, features)
+    def _compute_presence(self, timestep, previous_presence, presence_logit, *features):
+        presence_distrib = self._steps_predictor(timestep, previous_presence, presence_logit, features)
         presence = presence_distrib.sample() * previous_presence
         return presence, presence_distrib.probs, presence_distrib.logits
 
@@ -193,7 +193,7 @@ class DiscoveryCore(BaseSQAIRCore):
 
     def _build(self, xxx_todo_changeme, xxx_todo_changeme1):
         """Input is unused; it's only to force a maximum number of steps"""
-        (inpt, is_allowed) = xxx_todo_changeme
+        (timestep, inpt, is_allowed) = xxx_todo_changeme
         (img_flat, what_code, where_code, presence, hidden_state) = xxx_todo_changeme1
         img = tf.reshape(img_flat, (-1,) + tuple(self._img_size))
 
@@ -208,7 +208,7 @@ class DiscoveryCore(BaseSQAIRCore):
             what_code, what_loc, what_scale = self._compute_what(img, where_code)
 
         with tf.variable_scope('presence'):
-            presence, presence_prob, presence_logit = self._compute_presence(presence, None, hidden_output, what_code)
+            presence, presence_prob, presence_logit = self._compute_presence(timestep, presence, None, hidden_output, what_code)
 
         output = [
             what_code, what_loc, what_scale,
@@ -288,7 +288,7 @@ class PropagationCore(BaseSQAIRCore):
 
     def _build(self, xxx_todo_changeme2, state):
         """Input is unused; it's only to force a maximum number of steps"""
-        (z_tm1, temporal_hidden_state) = xxx_todo_changeme2
+        (timestep, z_tm1, temporal_hidden_state) = xxx_todo_changeme2
         what_tm1, where_tm1, presence_tm1, presence_logit_tm1 = z_tm1
         temporal_state = nest.flatten(temporal_hidden_state)[-1]
 
@@ -319,7 +319,7 @@ class PropagationCore(BaseSQAIRCore):
 
         with tf.variable_scope('presence'):
             presence, presence_prob, presence_logit \
-                = self._compute_presence(presence_tm1, presence_logit_tm1, hidden_output, temporal_state, what)
+                = self._compute_presence(timestep, presence_tm1, presence_logit_tm1, hidden_output, temporal_state, what)
 
         output = [what, what_sample, what_loc, what_scale, where, where_sample, where_loc, where_scale,
                   presence_prob, presence, presence_logit, temporal_hidden_state]

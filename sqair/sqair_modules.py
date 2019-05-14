@@ -136,7 +136,8 @@ class Discover(BaseSQAIRModule):
             exists = tf.greater(max_disc_steps, t)
             seq_len_inpt.append(tf.expand_dims(tf.to_float(exists), -1))
 
-        inpt = [[conditioning, s] for s in seq_len_inpt]
+        _time_step = tf.reshape(time_step, (1,))
+        inpt = [[_time_step, conditioning, s] for s in seq_len_inpt]
 
         hidden_outputs, hidden_state = tf.nn.static_rnn(self._cell, inpt, initial_state)
         hidden_outputs = self._cell.outputs_by_name(hidden_outputs)
@@ -204,7 +205,7 @@ class Discover(BaseSQAIRModule):
         if self._disc_prior_type == 'geom':
             support = tf.cast(tf.range(self._n_steps + 1), tf.float32)
             p = self._init_disc_step_success_prob
-            probs = p ** support * (1-p)
+            probs = p ** support
             probs = probs / tf.maximum(tf.reduce_sum(probs), 1e-6)
             num_steps_prior = tfd.Categorical(probs=probs)
 
@@ -216,11 +217,33 @@ class Discover(BaseSQAIRModule):
 
             # increase probability of zero steps when t>0
             init = [10.] + [0] * self._n_steps
-            timstep_bias = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_timestep_bias')
-            step_logits += (1. - is_first_timestep) * timstep_bias
+            timestep_bias = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_timestep_bias')
+            step_logits += (1. - is_first_timestep) * timestep_bias
 
             if prior_conditioning is not None:
                 step_logits = tf.expand_dims(step_logits, 0) + MLP(10, n_out=self._n_steps + 1)(prior_conditioning)
+
+            step_logits = tf.nn.elu(step_logits)
+            num_steps_prior = tfd.Categorical(logits=step_logits)
+
+        elif self._disc_prior_type == 'fixed':
+            step_logits = tf.constant([0.] * (self._n_steps + 1), dtype=tf.float32)
+            timestep_bias = tf.constant([10.] + [0.] * self._n_steps, dtype=tf.float32)
+            step_logits += (1. - is_first_timestep) * timestep_bias
+
+            step_logits = tf.nn.elu(step_logits)
+            num_steps_prior = tfd.Categorical(logits=step_logits)
+
+        elif self._disc_prior_type == 'special':
+            step_logits = tf.constant([0.] * (self._n_steps + 1), dtype=tf.float32)
+
+            # Force 0 discovered objects when t > 0
+            timestep_bias = tf.constant([100.] + [0.] * self._n_steps, dtype=tf.float32)
+            step_logits += (1. - is_first_timestep) * timestep_bias
+
+            # Force `n_steps` discovered objects when t == 0
+            timestep_bias = tf.constant([0.] * self._n_steps + [100.], dtype=tf.float32)
+            step_logits += is_first_timestep * timestep_bias
 
             step_logits = tf.nn.elu(step_logits)
             num_steps_prior = tfd.Categorical(logits=step_logits)
@@ -252,7 +275,7 @@ class Propagate(BaseSQAIRModule):
     def prior_init_state(self, batch_size, trainable=True, initializer=None):
         return self._prior.initial_state(batch_size, trainable, initializer)
 
-    def _build(self, img, z_tm1, temporal_state, prior_state, sample_from_prior=False, do_generate=False):
+    def _build(self, timestep, img, z_tm1, temporal_state, prior_state, sample_from_prior=False, do_generate=False):
         """
 
         :param img: `Tensor` of shape `[B, H, W, C]` representing images.
@@ -267,7 +290,7 @@ class Propagate(BaseSQAIRModule):
         presence_tm1 = z_tm1[2]
         prior_stats, prior_state = self._prior(z_tm1, prior_state)
 
-        hidden_outputs, num_steps, delta_what, delta_where = self._ssm(img, z_tm1, temporal_state)
+        hidden_outputs, num_steps, delta_what, delta_where = self._ssm(timestep, img, z_tm1, temporal_state)
         hidden_outputs, log_probs = self._compute_log_probs(presence_tm1, hidden_outputs, prior_stats, delta_what,
                                                             delta_where, sample_from_prior=sample_from_prior,
                                                             do_generate=do_generate)
@@ -501,7 +524,7 @@ class SQAIRTimestep(AbstractTimstepModule):
         :return: AttrDicts returned by propagation and discovery.
         """
 
-        prop_output = self._propagate(img, z_tm1, temporal_hidden_state, prop_prior_state,
+        prop_output = self._propagate(time_step, img, z_tm1, temporal_hidden_state, prop_prior_state,
                                       sample_from_prior, do_generate)
         conditioning_from_prop = self._encode_latents(prop_output.what, prop_output.where, prop_output.presence)
 

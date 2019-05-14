@@ -166,12 +166,14 @@ class SequentialSSM(snt.AbstractModule):
         super(SequentialSSM, self).__init__()
         self._cell = cell
 
-    def _build(self, img, z_tm1, temporal_hidden_state):
+    def _build(self, timestep, img, z_tm1, temporal_hidden_state):
 
         initial_state = self._cell.initial_state(img)
         unstacked_z_tm1 = list(zip(*[tf.unstack(z, axis=-2) for z in z_tm1]))
         unstacked_temp_state = tf.unstack(temporal_hidden_state, axis=-2)
-        inpt = list(zip(unstacked_z_tm1, unstacked_temp_state))
+
+        _timestep = tf.reshape(timestep, (1,))
+        inpt = [(_timestep, *other) for other in list(zip(unstacked_z_tm1, unstacked_temp_state))]
 
         hidden_outputs, hidden_state = tf.nn.static_rnn(self._cell, inpt, initial_state)
         hidden_outputs = self._cell.outputs_by_name(hidden_outputs)

@@ -468,6 +468,27 @@ class AIRDecoder(AIRGlimpse):
         return canvas, non_zero_mask
 
 
+class FixedStepsPredictor(snt.AbstractModule):
+    """ For discovery, predict all ones for first timestep, all zeros thereafter.
+        Propagation is the opposite. """
+
+    def __init__(self, discovery):
+        super().__init__()
+        self.discovery = discovery
+
+    def _build(self, timestep, previous_presence, *_):
+        is_first = tf.cast(tf.equal(timestep, 0), tf.float32)
+
+        if self.discovery:
+            logits = 88. * is_first + (1-is_first) * -88.
+        else:
+            logits = -88. * is_first + (1-is_first) * 88.
+
+        logits = logits * tf.ones_like(previous_presence)
+
+        return tfd.Bernoulli(logits=logits, dtype=tf.float32)
+
+
 class StepsPredictor(snt.AbstractModule):
     """Computes the probability logit for discovering or propagating an object."""
 
@@ -505,7 +526,7 @@ class StepsPredictor(snt.AbstractModule):
                                                    trainable=False)
             self._max_logit_change = max_logit_change
 
-    def _build(self, previous_presence, previous_logit, *features):
+    def _build(self, timestep, previous_presence, previous_logit, *features):
         init = {'b': tf.constant_initializer(self._steps_bias)}
         mlp = MLP(self._n_hidden, n_out=1, output_initializers=init)
 
