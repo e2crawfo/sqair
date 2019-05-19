@@ -50,8 +50,8 @@ class BaseSQAIRCore(snt.RNNCore):
     _output_names = None
     _what_scale_bias = 0.
 
-    def __init__(self, img_size, crop_size, n_what,
-                 transition, input_encoder, glimpse_encoder, transform_estimator, steps_predictor,
+    def __init__(self, encoded_input, img_size, crop_size, n_what,
+                 transition, glimpse_encoder, transform_estimator, steps_predictor,
                  where_loc_bias=None, debug=False, training_wheels=None):
         """Creates the cell
 
@@ -67,6 +67,7 @@ class BaseSQAIRCore(snt.RNNCore):
         """
 
         super(BaseSQAIRCore, self).__init__()
+        self.encoded_input = encoded_input
         self._img_size = img_size
         self._n_pix = np.prod(self._img_size)
         self._crop_size = crop_size
@@ -83,7 +84,7 @@ class BaseSQAIRCore(snt.RNNCore):
 
             self._spatial_transformer = SpatialTransformer(img_size, crop_size)
             self._transform_estimator = transform_estimator()
-            self._input_encoder = input_encoder()
+            # self._input_encoder = input_encoder()
             self._glimpse_encoder = glimpse_encoder()
             self._steps_predictor = steps_predictor()
 
@@ -163,8 +164,9 @@ class DiscoveryCore(BaseSQAIRCore):
         z0 = [tf.tile(i, (batch_size, n_steps, 1)) for i in (what, where, presence, presence_logit)]
         return z0
 
-    def _prepare_rnn_inputs(self, inpt, img, what, where, presence):
-        rnn_inpt = [self._input_encoder(img)]
+    def _prepare_rnn_inputs(self, inpt, encoded_inpt, what, where, presence):
+        rnn_inpt = [encoded_inpt]
+        # rnn_inpt = [self._input_encoder(encoded_)]
         if inpt is not None:
             rnn_inpt.extend(nest.flatten(inpt))
 
@@ -197,8 +199,10 @@ class DiscoveryCore(BaseSQAIRCore):
         (img_flat, what_code, where_code, presence, hidden_state) = xxx_todo_changeme1
         img = tf.reshape(img_flat, (-1,) + tuple(self._img_size))
 
+        encoded_input = self.encoded_input[timestep[0]]
+
         with tf.variable_scope('rnn_inpt'):
-            rnn_inpt = self._prepare_rnn_inputs(inpt, img, what_code, where_code, presence)
+            rnn_inpt = self._prepare_rnn_inputs(inpt, encoded_input, what_code, where_code, presence)
             hidden_output, hidden_state = self._cell(rnn_inpt, hidden_state)
 
         with tf.variable_scope('where'):
@@ -247,8 +251,8 @@ class PropagationCore(BaseSQAIRCore):
     _init_presence_value = 0.  # at the beginning we assume no objects
     _what_scale_bias = -3.
 
-    def __init__(self, img_size, crop_size, n_what,
-                 transition, input_encoder, glimpse_encoder, transform_estimator, steps_predictor, temporal_cell,
+    def __init__(self, encoded_input, img_size, crop_size, n_what,
+                 transition, glimpse_encoder, transform_estimator, steps_predictor, temporal_cell,
                  where_update_scale=1.0, debug=False, training_wheels=None):
         """Initialises the model.
 
@@ -258,7 +262,7 @@ class PropagationCore(BaseSQAIRCore):
         :param where_update_scale: Float, rescales the update of the `where` variables.
         """
 
-        super(PropagationCore, self).__init__(img_size, crop_size, n_what, transition, input_encoder,
+        super(PropagationCore, self).__init__(encoded_input, img_size, crop_size, n_what, transition,
                                               glimpse_encoder, transform_estimator, steps_predictor,
                                               debug=debug, training_wheels=training_wheels)
 
