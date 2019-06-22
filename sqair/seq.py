@@ -28,22 +28,16 @@ These models handle unrolling over a time-series of inputs and all necessary boo
 import sonnet as snt
 import tensorflow as tf
 
-import tensorflow.contrib.distributions as tfd
-from tensorflow.python.util import nest
-
 from attrdict import AttrDict
 
-from sqair.core import BaseSQAIRCore
-from sqair.sqair_modules import SQAIRTimestep, PropagateOnlyTimestep
-from sqair.modules import SpatialTransformer
+from sqair.sqair_modules import SQAIRTimestep
 
 
 class SequentialAIR(snt.AbstractModule):
     """Unrolls SQAIR over a time-series of inputs.
     """
     
-    def __init__(self, max_steps, glimpse_size, discover, propagate, time_cell, decoder,
-                 sample_from_prior=False, generate_after=-1):
+    def __init__(self, max_steps, glimpse_size, discover, propagate, time_cell, decoder, prior_start_step):
         """Initialises the module.
 
         :param max_steps:
@@ -52,26 +46,23 @@ class SequentialAIR(snt.AbstractModule):
         :param propagate:
         :param time_cell:
         :param decoder:
-        :param sample_from_prior:
-        :param generate_after:
+        :param prior_start_step:
         """
 
         super(SequentialAIR, self).__init__()
         self._max_steps = max_steps
         self._glimpse_size = glimpse_size
         self._decoder = decoder
-        self._sample_from_prior = sample_from_prior
-        self._generate_after = generate_after
+        self._prior_start_step = prior_start_step
 
         with self._enter_variable_scope():
             self._sqair = SQAIRTimestep(self._max_steps, discover, propagate, time_cell)
 
-    def _build(self, obs, coords=None, sample_from_prior=False):
+    def _build(self, obs, coords=None):
         """Unrolls the model in time.
 
         :param obs: Sequence of images of the shape `[T, B, H, W, C]`.
         :param coords: Should be always None; required for compatilibity reasons.
-        :param sample_from_prior: Sampels from the prior instead of the inference networks if True.
         :return: A dictionary of outputs, look at `self._loop_body` for an idea.
         """
         batch_size = int(obs.shape[1])
@@ -195,12 +186,10 @@ class SequentialAIR(snt.AbstractModule):
         # parse inputs
         img = img_seq[t]
 
-        do_generate = False
-        if self._generate_after > 0:
-            do_generate = tf.greater(t, self._generate_after)
+        sample_from_prior = tf.logical_and(0 <= self._prior_start_step, self._prior_start_step <= t)
 
         apdr_outputs = self._sqair(img, z_tm1, time_state, prop_prior_hidden_state, last_used_id, prev_ids,
-                                   t, self._sample_from_prior, do_generate)
+                                   t, sample_from_prior)
         hidden_outputs = apdr_outputs.hidden_outputs
         z_t = apdr_outputs.z_t
 

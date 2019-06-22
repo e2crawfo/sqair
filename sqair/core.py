@@ -306,7 +306,7 @@ class PropagationCore(BaseSQAIRCore):
             rnn_inpt = what_distrib.loc
 
             rnn_inpt = [
-                rnn_inpt,                                             # img
+                what_distrib.loc,
                 what_km1, where_km1, presence_km1,                    # explaining away
                 what_tm1, where_tm1, presence_tm1, temporal_state     # previous state
             ]
