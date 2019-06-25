@@ -148,8 +148,7 @@ class Decoder(snt.AbstractModule):
 
 
 class SpatialTransformer(snt.AbstractModule):
-    """Spatial Transformer module.
-    """
+    """ Spatial Transformer module. """
 
     def __init__(self, img_size, crop_size, inverse=False):
         """Initialises the module.
@@ -169,7 +168,21 @@ class SpatialTransformer(snt.AbstractModule):
 
     def _sample_image(self, img, transform_params):
         grid_coords = self._warper(transform_params)
-        return tf_resampler(img, grid_coords)
+
+        n_repeats = 0
+
+        batch_size = int(img.shape[0])
+        if batch_size < int(grid_coords.shape[0]):
+            assert int(grid_coords.shape[0]) % batch_size == 0
+            n_repeats = int(grid_coords.shape[0]) // batch_size
+            grid_coords = tf.reshape(grid_coords, (batch_size, n_repeats, *grid_coords.shape[1:]))
+
+        result = tf_resampler(img, grid_coords)
+
+        if n_repeats:
+            result = tf.reshape(result, (batch_size*n_repeats, *result.shape[2:]))
+
+        return result
 
     def _build(self, img, sentinel=None, coords=None, logits=None):
         """Applies the transformation.
@@ -310,7 +323,7 @@ class AIREncoder(AIRGlimpse):
     def __init__(self, img_size, glimpse_size, n_what, glimpse_encoder, scale_offset=0.,
                  masked_glimpse=False, debug=False):
 
-        super(AIREncoder, self).__init__(img_size, glimpse_size, inverse=False)
+        super().__init__(img_size, glimpse_size, inverse=False)
         self.n_what = n_what
         self._masked_glimpse = masked_glimpse
 
@@ -492,7 +505,7 @@ class FixedStepsPredictor(snt.AbstractModule):
 class StepsPredictor(snt.AbstractModule):
     """Computes the probability logit for discovering or propagating an object."""
 
-    def __init__(self, n_hidden, steps_bias=0., max_rel_logit_change=np.inf, max_logit_change=np.inf, training_wheels=None, **kwargs):
+    def __init__(self, n_hidden, steps_bias=0., max_rel_logit_change=np.inf, max_logit_change=np.inf, **kwargs):
         """
 
         :param n_hidden:
@@ -505,7 +518,6 @@ class StepsPredictor(snt.AbstractModule):
         self._steps_bias = steps_bias
         self._max_rel_logit_change = max_rel_logit_change
         self._bernoulli = lambda logits: tfd.Bernoulli(logits=logits, dtype=tf.float32, **kwargs)
-        self.training_wheels = training_wheels if training_wheels is not None else 0.
 
         with self._enter_variable_scope():
 
@@ -542,8 +554,6 @@ class StepsPredictor(snt.AbstractModule):
 
             elif self._max_logit_change != np.inf:
                 logit = previous_logit + self._max_logit_change * tf.nn.tanh(logit)
-
-        logit = self.training_wheels * tf.stop_gradient(logit) + (1-self.training_wheels) * logit
 
         return self._bernoulli(logit)
 

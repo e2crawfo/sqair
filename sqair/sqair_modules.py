@@ -44,7 +44,7 @@ class BaseSQAIRModule(snt.AbstractModule):
     _where_posterior = tfd.Normal
 
     def __init__(self):
-        super(BaseSQAIRModule, self).__init__()
+        super().__init__()
 
     def _make_posteriors(self, hidden_outputs):
         """Creates the posterior distributions.
@@ -68,7 +68,8 @@ class Discover(BaseSQAIRModule):
 
     def __init__(self, n_steps, cell, step_success_prob, where_mean=(-2., -2., 0., 0.),
                  where_std=(1., 1., 1., 1.), disc_prior_type='geom', rec_where_prior=False):
-        super(Discover, self).__init__()
+
+        super().__init__()
 
         self._n_steps = n_steps
         self._cell = cell
@@ -91,23 +92,22 @@ class Discover(BaseSQAIRModule):
     def initial_z(self, batch_size, n_steps):
         return self._cell.initial_z(batch_size, n_steps)
 
-    def _build(self, img, n_present_obj, conditioning_from_prop=None, time_step=0,
+    def _build(self, n_present_obj, conditioning_from_prop=None, timestep=0,
                prior_conditioning=None, sample_from_prior=False):
         """
 
-        :param img: `Tensor` of shape `[B, H, W, C]` of images.
         :param n_present_obj: `Tensor` of integer numbers (but dtype=tf.float32) of shape `[B]` representing
             number of already present object for every data example in the batch.
         :param conditioning_from_prop: `Tensor` of shape `[B, n]` representing summury of propagated latent variables.
-        :param time_step: Scalar tensor.
+        :param timestep: Scalar tensor.
         :param prior_conditioning: `Tensor` of shape `[B, m]`, additional conditioning passed to prior distributions.
         :param sample_from_prior: Boolean; if True samples from the prior instead of the inference network.
         :return: AttrDict of results.
         """
         max_disc_steps = self._n_steps - n_present_obj
 
-        hidden_outputs, num_steps = self._discover(img, max_disc_steps, conditioning_from_prop, time_step)
-        hidden_outputs, log_probs = self._compute_log_probs(hidden_outputs, num_steps, time_step,
+        hidden_outputs, num_steps = self._discover(max_disc_steps, conditioning_from_prop, timestep)
+        hidden_outputs, log_probs = self._compute_log_probs(hidden_outputs, num_steps, timestep,
                                                             conditioning_from_prop, prior_conditioning,
                                                             sample_from_prior)
 
@@ -121,21 +121,14 @@ class Discover(BaseSQAIRModule):
 
         return outputs
 
-    def _discover(self, img, max_disc_steps, conditioning, time_step):  # pylint: disable=unused-variable
-        """Performs object discovery.
-        """
+    def _discover(self, max_disc_steps, conditioning, timestep):  # pylint: disable=unused-variable
+        initial_state = self._cell.initial_state()
 
-        initial_state = self._cell.initial_state(img)
         if conditioning is None:
-            conditioning = tf.zeros((int(img.shape[0]), 1))
+            conditioning = tf.zeros((self._cell.batch_size, 1))
 
-        seq_len_inpt = []
-        for t in range(self._n_steps):
-            exists = tf.greater(max_disc_steps, t)
-            seq_len_inpt.append(tf.expand_dims(tf.to_float(exists), -1))
-
-        _time_step = tf.reshape(time_step, (1,))
-        inpt = [[_time_step, conditioning, s] for s in seq_len_inpt]
+        _timestep = timestep[None]
+        inpt = [[_timestep, conditioning] for t in range(self._n_steps)]
 
         hidden_outputs, hidden_state = tf.nn.static_rnn(self._cell, inpt, initial_state)
         hidden_outputs = self._cell.outputs_by_name(hidden_outputs)
@@ -144,14 +137,13 @@ class Discover(BaseSQAIRModule):
 
         return hidden_outputs, num_steps
 
-    def _compute_log_probs(self, hidden_outputs, num_steps, time_step, conditioning_from_prop,
+    def _compute_log_probs(self, hidden_outputs, num_steps, timestep, conditioning_from_prop,
                            prior_conditioning, sample_from_prior):
-        """Computes log probabilities of latent variables from discovery under both q and p.
-        """
+        """Computes log probabilities of latent variables from discovery under both q and p. """
 
         where_conditioning = tf.concat((conditioning_from_prop, prior_conditioning), -1)
 
-        priors = self._make_priors(time_step, prior_conditioning)
+        priors = self._make_priors(timestep, prior_conditioning)
 
         # ---
 
@@ -196,11 +188,10 @@ class Discover(BaseSQAIRModule):
 
         return hidden_outputs, o
 
-    def _make_priors(self, time_step, prior_conditioning):
-        """Instantiates prior distributions for discovery.
-        """
+    def _make_priors(self, timestep, prior_conditioning):
+        """Instantiates prior distributions for discovery. """
 
-        is_first_timestep = tf.to_float(tf.equal(time_step, 0))
+        is_first_timestep = tf.to_float(tf.equal(timestep, 0))
 
         if self._disc_prior_type == 'geom':
             support = tf.cast(tf.range(self._n_steps + 1), tf.float32)
@@ -249,28 +240,72 @@ class Discover(BaseSQAIRModule):
         return NumStepsDistribution(tf.squeeze(presence_prob, -1))
 
 
+def repeat_batchwise(t, n_repeats):
+    batch_size = int(t.shape[0])
+    t = tf.tile(t[:, None], (1, n_repeats) + (1,) * len(t.shape[1:]))
+    return tf.reshape(t, (batch_size*n_repeats, *t.shape[2:]))
+
+
+class FastDiscover(Discover):
+    """ Discovery without recurrence between objects. """
+
+    def __init__(self, object_state_predictor, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._object_state_predictor = object_state_predictor
+
+    def _discover(self, max_disc_steps, conditioning, timestep):
+        batch_size = self._cell.batch_size
+
+        if conditioning is None:
+            conditioning = tf.zeros((self._n_steps*batch_size, 1))
+        else:
+            conditioning = repeat_batchwise(conditioning, self._n_steps)
+
+        encoded_input = repeat_batchwise(self._cell.encoded_input[timestep], self._n_steps)
+
+        object_idx = tf.one_hot(tf.range(self._n_steps), self._n_steps)
+        object_idx = tf.tile(object_idx[None, ...], (batch_size, 1, 1))
+        object_idx = tf.reshape(object_idx, (batch_size*self._n_steps, self._n_steps))
+
+        state_predictor_inp = tf.concat([encoded_input, conditioning, object_idx], axis=1)
+
+        initial_hidden_state = self._object_state_predictor(state_predictor_inp)
+
+        initial_state = self._cell.initial_state(
+            self._cell.batch_size*self._n_steps, hidden_state=initial_hidden_state)
+
+        inpt = [timestep[None], conditioning]
+
+        hidden_outputs, hidden_state = self._cell(inpt, initial_state)
+
+        hidden_outputs = self._cell.outputs_by_name(hidden_outputs, stack=False)
+
+        def finalize(t):
+            return tf.reshape(t, (batch_size, self._n_steps, *t.shape[1:]))
+
+        hidden_outputs = type(hidden_outputs)({k: finalize(t) for k, t in hidden_outputs.items()})
+
+        num_steps = tf.reduce_sum(tf.squeeze(hidden_outputs.presence, -1), -1)
+
+        return hidden_outputs, num_steps
+
+
 class Propagate(BaseSQAIRModule):
     """Propagation module."""
 
-    def __init__(self, ssm, prior):
-        """Initialises the module
+    def __init__(self, cell, prior):
+        super().__init__()
 
-        :param ssm: RNNCore, a state space model, see propagate.py for an example.
-        :param prior: RNNCore for the propagation prior, see propagate.py for an example.
-        """
-
-        super(Propagate, self).__init__()
-        self._ssm = ssm
+        self._cell = cell
         self._prior = prior
-        self._where_posterior = self._ssm._cell._where_distrib
+        self._where_posterior = self._cell._where_distrib
 
     def prior_init_state(self, batch_size, trainable=True, initializer=None):
         return self._prior.initial_state(batch_size, trainable, initializer)
 
-    def _build(self, timestep, img, z_tm1, temporal_state, prior_state, sample_from_prior=False):
+    def _build(self, timestep, z_tm1, temporal_state, prior_state, sample_from_prior=False):
         """
 
-        :param img: `Tensor` of shape `[B, H, W, C]` representing images.
         :param z_tm1: 4-tuple of [what, where, presence, presence_logit] at the previous time-step.
         :param temporal_state: Hidden state of the temporal RNN.
         :param prior_state: Hidden state of the prior RNN.
@@ -281,7 +316,7 @@ class Propagate(BaseSQAIRModule):
         presence_tm1 = z_tm1[2]
         prior_stats, prior_state = self._prior(z_tm1, prior_state)
 
-        hidden_outputs, num_steps, delta_what, delta_where = self._ssm(timestep, img, z_tm1, temporal_state)
+        hidden_outputs, num_steps, delta_what, delta_where = self._propagate(timestep, z_tm1, temporal_state)
         hidden_outputs, log_probs = self._compute_log_probs(presence_tm1, hidden_outputs, prior_stats, delta_what,
                                                             delta_where, sample_from_prior=sample_from_prior)
 
@@ -296,10 +331,28 @@ class Propagate(BaseSQAIRModule):
         outputs.update(log_probs)
         return outputs
 
+    def _propagate(self, timestep, z_tm1, temporal_hidden_state):
+        initial_state = self._cell.initial_state()
+        unstacked_z_tm1 = list(zip(*[tf.unstack(z, axis=-2) for z in z_tm1]))
+        unstacked_temp_state = tf.unstack(temporal_hidden_state, axis=-2)
+
+        _timestep = tf.reshape(timestep, (1,))
+        inpt = [(_timestep, *other) for other in list(zip(unstacked_z_tm1, unstacked_temp_state))]
+
+        hidden_outputs, hidden_state = tf.nn.static_rnn(self._cell, inpt, initial_state)
+        hidden_outputs = self._cell.outputs_by_name(hidden_outputs)
+
+        delta_what, delta_where = hidden_outputs.what_sample, hidden_outputs.where_sample
+        del hidden_outputs.what_sample
+        del hidden_outputs.where_sample
+
+        num_steps = tf.reduce_sum(tf.squeeze(hidden_outputs.presence, -1), -1)
+
+        return hidden_outputs, num_steps, delta_what, delta_where
+
     def _compute_log_probs(self, presence_tm1, hidden_outputs, prior_stats, delta_what,
                            delta_where, sample_from_prior=False):
-        """Computes log probabilities, see Discovery class.
-        """
+        """Computes log probabilities, see Discovery class.  """
 
         presence = tf.squeeze(hidden_outputs.presence, -1)
         presence_tm1 = tf.squeeze(presence_tm1, -1)
@@ -350,9 +403,37 @@ class Propagate(BaseSQAIRModule):
         return tfd.Bernoulli(logits=tf.squeeze(presence_logit, -1))
 
 
-class AbstractTimstepModule(snt.AbstractModule):
-    """Abstract base-class for modules handling a single time-step of a sequence.
-    """
+class FastPropagate(Propagate):
+    def _propagate(self, timestep, z_tm1, temporal_hidden_state):
+        batch_size = self._cell.batch_size
+        n_steps = int(temporal_hidden_state.shape[1])
+
+        initial_state = self._cell.initial_state(self._cell.batch_size*n_steps)
+
+        z_tm1 = [tf.reshape(z, (batch_size*n_steps, *z.shape[2:])) for z in z_tm1]
+        temporal_hidden_state = tf.reshape(
+            temporal_hidden_state, (batch_size*n_steps, *temporal_hidden_state.shape[2:]))
+
+        inpt = [timestep[None], z_tm1, temporal_hidden_state]
+        hidden_outputs, hidden_state = self._cell(inpt, initial_state)
+        hidden_outputs = self._cell.outputs_by_name(hidden_outputs, stack=False)
+
+        def finalize(t):
+            return tf.reshape(t, (batch_size, n_steps, *t.shape[1:]))
+
+        hidden_outputs = type(hidden_outputs)({k: finalize(t) for k, t in hidden_outputs.items()})
+
+        delta_what, delta_where = hidden_outputs.what_sample, hidden_outputs.where_sample
+        del hidden_outputs.what_sample
+        del hidden_outputs.where_sample
+
+        num_steps = tf.reduce_sum(tf.squeeze(hidden_outputs.presence, -1), -1)
+
+        return hidden_outputs, num_steps, delta_what, delta_where
+
+
+class AbstractTimestepModule(snt.AbstractModule):
+    """Abstract base-class for modules handling a single time-step of a sequence. """
 
     def __init__(self, n_steps, n_latent_code=0, relation_embedding=False):
         """Initialises the module.
@@ -361,7 +442,7 @@ class AbstractTimstepModule(snt.AbstractModule):
         :param n_latent_code:  Integer, dimensionality of summary of latent variables.
         :param relation_embedding: Boolean; computes DeepSet-like embedding of latent variables if True.
         """
-        super(AbstractTimstepModule, self).__init__()
+        super().__init__()
         self._n_steps = n_steps
         self._n_latent_code = n_latent_code
         self._relation_embedding = relation_embedding
@@ -381,7 +462,7 @@ class AbstractTimstepModule(snt.AbstractModule):
     def initial_temporal_state(self, *args, **kwargs):
 
         if not hasattr(self, '_initial_temporal_state'):
-            state = self._propagate._ssm._cell._temporal_cell.initial_state(*args, **kwargs)
+            state = self._propagate._cell._temporal_cell.initial_state(*args, **kwargs)
             self._initial_temporal_state = nested.tile_along_newaxis(state, self._n_steps, 1)
 
         return self._initial_temporal_state
@@ -406,7 +487,7 @@ class AbstractTimstepModule(snt.AbstractModule):
         return tf.reduce_sum(features, -2)
 
 
-class PropagateOnlyTimestep(AbstractTimstepModule):
+class PropagateOnlyTimestep(AbstractTimestepModule):
     """Mock for propagation-only model.
 
     This class was used in the development stage of the project, where the inference was initialized
@@ -418,15 +499,15 @@ class PropagateOnlyTimestep(AbstractTimstepModule):
         if isinstance(n_units, tf.TensorShape):
             n_units = n_units[0]
 
-        super(PropagateOnlyTimestep, self).__init__(n_steps, n_units, relation_embedding)
+        super().__init__(n_steps, n_units, relation_embedding)
         self._propagate = propagate
         self._time_cell = time_cell
         self._decoder = decoder
 
-    def _build(self, img, z_tm1, temporal_hidden_state, prop_prior_state,
-               time_step=0, sample_from_prior=False):
+    def _build(self, z_tm1, temporal_hidden_state, prop_prior_state,
+               timestep=0, sample_from_prior=False):
 
-        outputs = self._propagate(img, z_tm1, temporal_hidden_state, prop_prior_state, sample_from_prior)
+        outputs = self._propagate(z_tm1, temporal_hidden_state, prop_prior_state, sample_from_prior)
 
         outputs.z_t = (outputs.what, outputs.where, outputs.presence, outputs.presence_logit)
         outputs.prop_prior_state = prop_prior_state
@@ -434,7 +515,7 @@ class PropagateOnlyTimestep(AbstractTimstepModule):
         return outputs
 
 
-class SQAIRTimestep(AbstractTimstepModule):
+class SQAIRTimestep(AbstractTimestepModule):
     """Implements one time-step of propagation and discovery - full SQAIR model.
     """
 
@@ -445,13 +526,13 @@ class SQAIRTimestep(AbstractTimstepModule):
         :param discover: Discovery module.
         :param propagate: Propagate module.
         :param time_cell: RNNCell.
-        :param relation_embedding: Boolean, see AbstractTimstepModule.
+        :param relation_embedding: Boolean, see AbstractTimestepModule.
         """
         n_units = nest.flatten(discover._cell.state_size)[-1]
         if isinstance(n_units, tf.TensorShape):
             n_units = n_units[0]
 
-        super(SQAIRTimestep, self).__init__(n_steps, n_units, relation_embedding)
+        super().__init__(n_steps, n_units, relation_embedding)
         self._discover = discover
         self._propagate = propagate
         self._time_cell = time_cell
@@ -463,11 +544,10 @@ class SQAIRTimestep(AbstractTimstepModule):
     def initial_z(self, batch_size):
         return self._discover.initial_z(batch_size, self._n_steps)
 
-    def _build(self, img, z_tm1, temporal_hidden_state, prop_prior_state, highest_used_ids, prev_ids,
-               time_step=0, sample_from_prior=False):
+    def _build(self, z_tm1, temporal_hidden_state, prop_prior_state, highest_used_ids, prev_ids,
+               timestep=0, sample_from_prior=False):
         """
 
-        :param img: `Tensor` of size `[B, H, W, C]` representing images.
         :param z_tm1: 4-tuple of [what, where, presence, presence_logit] from previous time-step.
         :param temporal_hidden_state: Hidden state of the time_cell.
         :param prop_prior_state: Hidden state of the propagation prior.
@@ -475,15 +555,15 @@ class SQAIRTimestep(AbstractTimstepModule):
             ID for the corresponding data example in the batch.
         :param prev_ids: Integer `Tensor` of size `[B, n_steps]`, with each entry representing object ID of the
             corresponding object at the previous time-step.
-        :param time_step: Integer.
+        :param timestep: Integer.
         :param sample_from_prior: Boolean; if True samples from the prior instead of the inference network.
         :return: AttrDict of results.
         """
 
-        batch_size = int(img.shape[0])
+        batch_size = self._discover._cell.batch_size
         prop_output, disc_output = \
-            self._propagate_and_discover(img, z_tm1, temporal_hidden_state, prop_prior_state,
-                                         time_step, sample_from_prior)
+            self._propagate_and_discover(z_tm1, temporal_hidden_state, prop_prior_state,
+                                         timestep, sample_from_prior)
 
         hidden_outputs, z_t, obj_ids, prop_prior_state, temporal_hidden_state, highest_used_ids = \
             self._choose_latents(batch_size, prop_output, disc_output, highest_used_ids, prev_ids)
@@ -507,23 +587,21 @@ class SQAIRTimestep(AbstractTimstepModule):
 
         return outputs
 
-    def _propagate_and_discover(self, img, z_tm1, temporal_hidden_state, prop_prior_state,
-                                time_step, sample_from_prior):
+    def _propagate_and_discover(self, z_tm1, temporal_hidden_state, prop_prior_state,
+                                timestep, sample_from_prior):
         """Propagates and discovers object. See self._build for argument docs.
 
         :return: AttrDicts returned by propagation and discovery.
         """
 
-        prop_output = self._propagate(time_step, img, z_tm1, temporal_hidden_state, prop_prior_state, sample_from_prior)
+        prop_output = self._propagate(timestep, z_tm1, temporal_hidden_state, prop_prior_state, sample_from_prior)
         conditioning_from_prop = self._encode_latents(prop_output.what, prop_output.where, prop_output.presence)
-
-        discovery_inpt_img = img
 
         prop_prior_step_logits = tf.squeeze(prop_output.prior_stats[-1], -1)
         prop_prior_step_probs = (tf.nn.sigmoid(prop_prior_step_logits) - 0.5) / self._n_steps
         expected_prop_prior_num_step = tf.reduce_sum(prop_prior_step_probs, axis=-1, keep_dims=True)
 
-        disc_output = self._discover(discovery_inpt_img, prop_output.num_steps, conditioning_from_prop, time_step,
+        disc_output = self._discover(prop_output.num_steps, conditioning_from_prop, timestep,
                                      expected_prop_prior_num_step, sample_from_prior)
 
         return prop_output, disc_output

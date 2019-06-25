@@ -92,16 +92,13 @@ def load(img, coords, num, mean_img=None, debug=False):
         return AIREncoder(img_size, params.glimpse_size, F.n_what, Encoder(params.n_hiddens),
                           masked_glimpse=F.masked_glimpse, debug=F.debug)
 
-    training_wheels = 0.
-
     transform_estimator = partial(StochasticTransformParam, params.n_hiddens, F.transform_var_bias)
-    steps_predictor = partial(StepsPredictor, params.steps_pred_hidden, F.disc_step_bias, training_wheels=training_wheels)
+    steps_predictor = partial(StepsPredictor, params.steps_pred_hidden, F.disc_step_bias)
 
     with tf.variable_scope('discovery'):
         discover_cell = DiscoveryCore(img_size, params.glimpse_size, F.n_what, rnn_class(params.n_hidden),
                                       input_encoder, glimpse_encoder, transform_estimator, steps_predictor,
-                                      debug=debug, training_wheels=training_wheels,
-                                      )
+                                      debug=debug)
 
         discover = Discover(F.n_steps_per_image, discover_cell,
                             step_success_prob=F.step_success_prob,
@@ -121,8 +118,7 @@ def load(img, coords, num, mean_img=None, debug=False):
         temporal_rnn_cell = time_rnn_class(params.n_hidden)
         propagation_cell = PropagationCore(img_size, params.glimpse_size, F.n_what, propagate_rnn_cell,
                                            input_encoder, glimpse_encoder, transform_estimator,
-                                           steps_predictor, temporal_rnn_cell,
-                                           debug=debug, training_wheels=training_wheels)
+                                           steps_predictor, temporal_rnn_cell, debug=debug)
 
         prior_rnn = maybe_getattr(snt, F.prior_transition)(params.n_hidden)
         propagation_prior = make_prior(F.prop_prior_type, F.n_what, prior_rnn, F.prop_prior_step_bias)

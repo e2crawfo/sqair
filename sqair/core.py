@@ -18,11 +18,10 @@
 # GNU General Public License for more details.
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
-# 
+#
 ########################################################################################
 
-"""RNN cores for discovery and propagation.
-"""
+"""RNN cores for discovery and propagation. """
 
 import numpy as np
 import sonnet as snt
@@ -31,8 +30,6 @@ import tensorflow.contrib.distributions as tfd
 from tensorflow.python.util import nest
 
 import orderedattrdict
-
-from dps import cfg
 
 from sqair.modules import SpatialTransformer, AffineDiagNormal, GaussianFromParamVec
 from sqair.neural import MLP, Nonlinear
@@ -50,16 +47,14 @@ class BaseSQAIRCore(snt.RNNCore):
     _output_names = None
     _what_scale_bias = 0.
 
-    def __init__(self, encoded_input, img_size, crop_size, n_what,
+    def __init__(self, inpt, encoded_input, crop_size, n_what,
                  transition, glimpse_encoder, transform_estimator, steps_predictor,
-                 where_loc_bias=None, debug=False, training_wheels=None):
+                 where_loc_bias=None, debug=False):
         """Creates the cell
 
-        :param img_size: int tuple, size of the image
         :param crop_size: int tuple, size of the attention glimpse
         :param n_what: number of latent units describing the "what"
         :param transition: an RNN cell for maintaining the internal hidden state
-        :param input_encoder: callable, encodes the original input image before passing it into the transition
         :param glimpse_encoder: callable, encodes the glimpse into latent representation
         :param transform_estimator: callabe, transforms the hidden state into parameters for the spatial transformer
         :param steps_predictor: callable, predicts whether to take a step
@@ -67,24 +62,23 @@ class BaseSQAIRCore(snt.RNNCore):
         """
 
         super(BaseSQAIRCore, self).__init__()
+
+        self.inpt = inpt
         self.encoded_input = encoded_input
-        self._img_size = img_size
+        _, self.batch_size, *self._img_size = inpt.shape.as_list()
         self._n_pix = np.prod(self._img_size)
         self._crop_size = crop_size
         self._n_what = n_what
         self._cell = transition
         self._n_hidden = int(self._cell.output_size[0])
-        self.training_wheels = training_wheels if training_wheels is not None else 0.
 
         self._where_loc_bias = where_loc_bias
 
         self._debug = debug
 
         with self._enter_variable_scope():
-
-            self._spatial_transformer = SpatialTransformer(img_size, crop_size)
+            self._spatial_transformer = SpatialTransformer(self._img_size, crop_size)
             self._transform_estimator = transform_estimator()
-            # self._input_encoder = input_encoder()
             self._glimpse_encoder = glimpse_encoder()
             self._steps_predictor = steps_predictor()
 
@@ -99,7 +93,6 @@ class BaseSQAIRCore(snt.RNNCore):
     @property
     def state_size(self):
         return [
-            np.prod(self._img_size),  # image
             self._n_what,  # what
             self._n_transform_param,  # where
             1,  # presence
@@ -121,13 +114,14 @@ class BaseSQAIRCore(snt.RNNCore):
 
         return d
 
-    def initial_state(self, img, hidden_state=None):
+    def initial_state(self, batch_size=None, hidden_state=None):
         """Initialises the hidden state.
 
-        :param img: Image to perform inference on.
         :param hidden_state: If not None, uses it as the hidden state for the internal RNN.
+
         """
-        batch_size = img.get_shape().as_list()[0]
+        if batch_size is None:
+            batch_size = self.batch_size
 
         if hidden_state is None:
             hidden_state = self._cell.initial_state(batch_size, tf.float32, trainable=True)
@@ -137,9 +131,8 @@ class BaseSQAIRCore(snt.RNNCore):
 
         where_code, what_code = (tf.tile(i, (batch_size, 1)) for i in (where_code, what_code))
 
-        flat_img = tf.reshape(img, (batch_size, self._n_pix))
         init_presence = tf.ones((batch_size, 1), dtype=tf.float32) * self._init_presence_value
-        return [flat_img, what_code, where_code, init_presence, hidden_state]
+        return [what_code, where_code, init_presence, hidden_state]
 
     def _compute_presence(self, timestep, previous_presence, presence_logit, *features):
         presence_distrib = self._steps_predictor(timestep, previous_presence, presence_logit, features)
@@ -166,7 +159,6 @@ class DiscoveryCore(BaseSQAIRCore):
 
     def _prepare_rnn_inputs(self, inpt, encoded_inpt, what, where, presence):
         rnn_inpt = [encoded_inpt]
-        # rnn_inpt = [self._input_encoder(encoded_)]
         if inpt is not None:
             rnn_inpt.extend(nest.flatten(inpt))
 
@@ -185,21 +177,30 @@ class DiscoveryCore(BaseSQAIRCore):
             self._n_what,  # what code
             self._n_what,  # what loc
             self._n_what,  # what scale
+
             self._n_transform_param,  # where code
             self._n_transform_param,  # where loc
             self._n_transform_param,  # where scale
+
             1,  # presence prob
             1,  # presence
             1  # presence_logit
         ]
 
-    def _build(self, xxx_todo_changeme, xxx_todo_changeme1):
-        """Input is unused; it's only to force a maximum number of steps"""
-        (timestep, inpt, is_allowed) = xxx_todo_changeme
-        (img_flat, what_code, where_code, presence, hidden_state) = xxx_todo_changeme1
-        img = tf.reshape(img_flat, (-1,) + tuple(self._img_size))
+    def _build(self, inpt, state):
+
+        timestep, inpt = inpt
+        what_code, where_code, presence, hidden_state = state
 
         encoded_input = self.encoded_input[timestep[0]]
+        if encoded_input.shape[0] < inpt.shape[0]:
+            assert int(inpt.shape[0]) % int(encoded_input.shape[0]) == 0
+            n_repeats = int(inpt.shape[0]) // int(encoded_input.shape[0])
+            batch_size = int(encoded_input.shape[0])
+            encoded_input = tf.tile(encoded_input[:, None], (1, n_repeats) + (1,) * len(encoded_input.shape[1:]))
+            encoded_input = tf.reshape(encoded_input, (batch_size*n_repeats, *encoded_input.shape[2:]))
+
+        img = self.inpt[timestep[0]]
 
         with tf.variable_scope('rnn_inpt'):
             rnn_inpt = self._prepare_rnn_inputs(inpt, encoded_input, what_code, where_code, presence)
@@ -212,14 +213,16 @@ class DiscoveryCore(BaseSQAIRCore):
             what_code, what_loc, what_scale = self._compute_what(img, where_code)
 
         with tf.variable_scope('presence'):
-            presence, presence_prob, presence_logit = self._compute_presence(timestep, presence, None, hidden_output, what_code)
+            presence, presence_prob, presence_logit = (
+                self._compute_presence(timestep, presence, None, hidden_output, what_code)
+            )
 
         output = [
             what_code, what_loc, what_scale,
             where_code, where_loc, where_scale,
             presence_prob, presence, presence_logit
         ]
-        new_state = [img_flat, what_code, where_code, presence, hidden_state]
+        new_state = [what_code, where_code, presence, hidden_state]
 
         return output, new_state
 
@@ -232,39 +235,27 @@ class DiscoveryCore(BaseSQAIRCore):
         if self._where_loc_bias is not None:
             loc += np.asarray(self._where_loc_bias).reshape((1, 4))
 
-        loc = self.training_wheels * tf.stop_gradient(loc) + (1-self.training_wheels) * loc
-        scale = self.training_wheels * tf.stop_gradient(scale) + (1-self.training_wheels) * scale
-
         scale = tf.nn.softplus(scale) + 1e-2
         where_distrib = tfd.Normal(loc, scale, validate_args=self._debug, allow_nan_stats=not self._debug)
         return where_distrib.sample(), loc, scale
 
 
 class PropagationCore(BaseSQAIRCore):
-    """Recurrent propagation core.
+    """ Recurrent propagation core. It is run iteratively to propagate several objects. """
 
-    It is run iteratively to propagate several objects.
-    """
-    _output_names = 'what what_sample what_loc what_scale where where_sample where_loc where_scale presence_prob' \
-                    ' presence presence_logit temporal_state'.split()
+    _output_names = (
+        'what what_sample what_loc what_scale where where_sample where_loc where_scale presence_prob'
+        ' presence presence_logit temporal_state').split()
 
-    _init_presence_value = 0.  # at the beginning we assume no objects
+    _init_presence_value = 0.
     _what_scale_bias = -3.
 
     def __init__(self, encoded_input, img_size, crop_size, n_what,
                  transition, glimpse_encoder, transform_estimator, steps_predictor, temporal_cell,
-                 where_update_scale=1.0, debug=False, training_wheels=None):
-        """Initialises the model.
-
-        If argument is not covered here, see BaseSQAIRCore for documentation.
-
-        :param temporal_cell: RNNCore for the temporal rnn.
-        :param where_update_scale: Float, rescales the update of the `where` variables.
-        """
+                 where_update_scale=1.0, debug=False):
 
         super(PropagationCore, self).__init__(encoded_input, img_size, crop_size, n_what, transition,
-                                              glimpse_encoder, transform_estimator, steps_predictor,
-                                              debug=debug, training_wheels=training_wheels)
+                                              glimpse_encoder, transform_estimator, steps_predictor, debug=debug)
 
         self._temporal_cell = temporal_cell
         with self._enter_variable_scope():
@@ -290,20 +281,20 @@ class PropagationCore(BaseSQAIRCore):
             self._temporal_cell.state_size,
         ]
 
-    def _build(self, xxx_todo_changeme2, state):
+    def _build(self, inpt, state):
         """Input is unused; it's only to force a maximum number of steps"""
-        (timestep, z_tm1, temporal_hidden_state) = xxx_todo_changeme2
+        timestep, z_tm1, temporal_hidden_state = inpt
         what_tm1, where_tm1, presence_tm1, presence_logit_tm1 = z_tm1
         temporal_state = nest.flatten(temporal_hidden_state)[-1]
 
         # different object, current timestep
-        img_flat, what_km1, where_km1, presence_km1, hidden_state = state
+        what_km1, where_km1, presence_km1, hidden_state = state
 
-        img = tf.reshape(img_flat, (-1,) + tuple(self._img_size))
+        img = self.inpt[timestep[0]]
+
         with tf.variable_scope('rnn_inpt'):
             where_bias = MLP(128, n_out=4)(temporal_state) * .1
             what_distrib = self._glimpse_encoder(img, where_tm1 + where_bias, mask_inpt=temporal_state)[0]
-            rnn_inpt = what_distrib.loc
 
             rnn_inpt = [
                 what_distrib.loc,
@@ -318,7 +309,7 @@ class PropagationCore(BaseSQAIRCore):
             where, where_sample, where_loc, where_scale = self._compute_where(where_tm1, hidden_output, temporal_state)
 
         with tf.variable_scope('what'):
-            what, what_sample, what_loc, what_scale, temporal_hidden_state\
+            what, what_sample, what_loc, what_scale, temporal_hidden_state \
                 = self._compute_what(img, what_tm1, where, hidden_output, temporal_hidden_state, temporal_state)
 
         with tf.variable_scope('presence'):
@@ -327,7 +318,7 @@ class PropagationCore(BaseSQAIRCore):
 
         output = [what, what_sample, what_loc, what_scale, where, where_sample, where_loc, where_scale,
                   presence_prob, presence, presence_logit, temporal_hidden_state]
-        new_state = [img_flat, what, where, presence, hidden_state]
+        new_state = [what, where, presence, hidden_state]
 
         return output, new_state
 
@@ -338,9 +329,6 @@ class PropagationCore(BaseSQAIRCore):
 
         loc = where_tm1 + self._where_update_scale * loc
         scale = tf.nn.softplus(scale - 1.) + 1e-2
-
-        loc = self.training_wheels * tf.stop_gradient(loc) + (1-self.training_wheels) * loc
-        scale = self.training_wheels * tf.stop_gradient(scale) + (1-self.training_wheels) * scale
 
         where_distrib = self._where_distrib(loc, scale)
         where_sample = where_distrib.sample()

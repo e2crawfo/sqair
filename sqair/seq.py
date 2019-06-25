@@ -188,7 +188,7 @@ class SequentialAIR(snt.AbstractModule):
 
         sample_from_prior = tf.logical_and(0 <= self._prior_start_step, self._prior_start_step <= t)
 
-        apdr_outputs = self._sqair(img, z_tm1, time_state, prop_prior_hidden_state, last_used_id, prev_ids,
+        apdr_outputs = self._sqair(z_tm1, time_state, prop_prior_hidden_state, last_used_id, prev_ids,
                                    t, sample_from_prior)
         hidden_outputs = apdr_outputs.hidden_outputs
         z_t = apdr_outputs.z_t

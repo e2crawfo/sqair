@@ -97,15 +97,15 @@ class FeedForwardNet(snt.AbstractModule):
         raise NotImplementedError
 
     def _build(self, inpt):
-            layers = []
-            for n, (n_hidden, hidden_transfer) in enumerate(zip(self._n_hiddens, self._hidden_transfers)):
-                layers.append(self._create_layer(n_hidden, hidden_transfer, self._initializers, n=n))
+        layers = []
+        for n, (n_hidden, hidden_transfer) in enumerate(zip(self._n_hiddens, self._hidden_transfers)):
+            layers.append(self._create_layer(n_hidden, hidden_transfer, self._initializers, n=n))
 
-            if self._n_out is not None:
-                layers.append(self._create_layer(self._n_out, self._transfer, self._output_initializers, n=-1))
+        if self._n_out is not None:
+            layers.append(self._create_layer(self._n_out, self._transfer, self._output_initializers, n=-1))
 
-            module = snt.Sequential(layers)
-            return module(inpt)
+        module = snt.Sequential(layers)
+        return module(inpt)
 
 
 class MLP(FeedForwardNet):
