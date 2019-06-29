@@ -539,6 +539,8 @@ class StepsPredictor(snt.AbstractModule):
             self._max_logit_change = max_logit_change
 
     def _build(self, timestep, previous_presence, previous_logit, *features):
+        """ `previous_presence` means previous object within the same timestep,
+            but `previous_logit` means previous timestep but same object. """
         init = {'b': tf.constant_initializer(self._steps_bias)}
         mlp = MLP(self._n_hidden, n_out=1, output_initializers=init)
 

@@ -152,6 +152,8 @@ class Discover(BaseSQAIRModule):
 
         pres_sample = priors[2].sample()
         pres_sample = tf.sequence_mask(pres_sample, maxlen=self._n_steps, dtype=tf.float32)
+
+        # vvv I missed this before...but it basically means discovery is skipped when sampling from prior_log_probs
         pres_sample = tf.expand_dims(pres_sample, -1) * 0.
 
         sfp = tf.to_float(sample_from_prior)
@@ -203,6 +205,8 @@ class Discover(BaseSQAIRModule):
             # num_steps_prior = tfd.Geometric(probs=1. - self._init_disc_step_success_prob)
 
         elif self._disc_prior_type == 'cat':
+            # So notice that we're just directly predicting the number of steps
+            # as a categorical, rather than predicting incrementally.
             init = [0.] * (self._n_steps + 1)
             step_logits = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_bias')
 
@@ -211,6 +215,8 @@ class Discover(BaseSQAIRModule):
             timestep_bias = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_timestep_bias')
             step_logits += (1. - is_first_timestep) * timestep_bias
 
+            # vvv this prior conditioning is "expected_prop_prior_num_step".
+            # Roughly the number of steps predicted by the propagation prior.
             if prior_conditioning is not None:
                 step_logits = tf.expand_dims(step_logits, 0) + MLP(10, n_out=self._n_steps + 1)(prior_conditioning)
 
