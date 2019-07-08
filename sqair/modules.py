@@ -409,7 +409,7 @@ class AIRDecoder(AIRGlimpse):
         with self._enter_variable_scope():
             self._glimpse_decoder = glimpse_decoder((*glimpse_size, *self.img_depth))
             if self._mean_img is not None:
-                self._mean_img = tf.Variable(self._mean_img, dtype=tf.float32, trainable=True)
+                self._mean_img = tf.get_variable('mean_img', initializer=self._mean_img, dtype=tf.float32, trainable=True)
                 self._mean_img = tf.expand_dims(self._mean_img, 0)
 
             self._batch = functools.partial(snt.BatchApply, n_dims=self._batch_dims)

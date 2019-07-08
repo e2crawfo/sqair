@@ -208,11 +208,11 @@ class Discover(BaseSQAIRModule):
             # So notice that we're just directly predicting the number of steps
             # as a categorical, rather than predicting incrementally.
             init = [0.] * (self._n_steps + 1)
-            step_logits = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_bias')
+            step_logits = tf.get_variable('step_prior_bias', initializer=init, trainable=True, dtype=tf.float32)
 
             # increase probability of zero steps when t>0
             init = [10.] + [0] * self._n_steps
-            timestep_bias = tf.Variable(init, trainable=True, dtype=tf.float32, name='step_prior_timestep_bias')
+            timestep_bias = tf.get_variable('step_prior_timestep_bias', initializer=init, trainable=True, dtype=tf.float32)
             step_logits += (1. - is_first_timestep) * timestep_bias
 
             # vvv this prior conditioning is "expected_prop_prior_num_step".
