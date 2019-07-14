@@ -150,7 +150,7 @@ class Decoder(snt.AbstractModule):
 class SpatialTransformer(snt.AbstractModule):
     """ Spatial Transformer module. """
 
-    def __init__(self, img_size, crop_size, inverse=False):
+    def __init__(self, img_size, crop_size, inverse=False, scale_bounds=None):
         """Initialises the module.
 
         :param img_size: Tuple of ints, size of the input image.
@@ -159,6 +159,7 @@ class SpatialTransformer(snt.AbstractModule):
         """
 
         super(SpatialTransformer, self).__init__()
+        self.scale_bounds = scale_bounds
 
         with self._enter_variable_scope():
             constraints = snt.AffineWarpConstraints.no_shear_2d()
@@ -229,21 +230,27 @@ class SpatialTransformer(snt.AbstractModule):
             samples = [self._sample_image(img, tp) for tp in transform_params]
             return tf.stack(samples, axis=1)
 
-    @staticmethod
-    def to_coords(logits):
+    def to_coords(self, logits):
         scale_logit, shift_logit = tf.split(logits, 2, -1)
 
-        scale = tf.nn.sigmoid(scale_logit)
+        if self.scale_bounds is None:
+            low_scale, high_scale = (0.0, 1.0)
+        else:
+            low_scale, high_scale = self.scale_bounds
+
+        scale = tf.nn.sigmoid(scale_logit) * (high_scale - low_scale) + low_scale
         shift = tf.nn.tanh(shift_logit)
         coords = tf.concat((scale, shift), -1)
         return coords
 
-    @staticmethod
-    def to_logits(coords, eps=1e-4):
+    def to_logits(self, coords, eps=1e-4):
         coords = tf.convert_to_tensor(coords)
         scale, shift = tf.split(coords, 2, -1)
 
+        low_scale, high_scale = (0.0, 1.0) if self.scale_bounds is None else self.scale_bounds
+
         # scale = tf.nn.sigmoid(scale)
+        scale = (scale - low_scale) / (high_scale - low_scale)
         scale_logit = tf.clip_by_value(scale, eps, 1. - eps)
         scale_logit = tf.log(scale_logit / (1. - scale_logit))
 
@@ -296,7 +303,7 @@ class AIRGlimpse(snt.AbstractModule):
     """Abstract class for AIR decoders and encoders.
     """
 
-    def __init__(self, img_size, glimpse_size, inverse):
+    def __init__(self, img_size, glimpse_size, inverse, scale_bounds=None):
         """Initialises the module.
 
         :param img_size: Tuple of ints.
@@ -308,7 +315,7 @@ class AIRGlimpse(snt.AbstractModule):
         img_size = h, w
         super(AIRGlimpse, self).__init__()
         self._glimpse_size = glimpse_size
-        self._transformer = SpatialTransformer(img_size, glimpse_size, inverse=inverse)
+        self._transformer = SpatialTransformer(img_size, glimpse_size, inverse=inverse, scale_bounds=scale_bounds)
 
     def to_coords(self, where_logits):
         return self._transformer.to_coords(where_logits)
@@ -383,7 +390,7 @@ class AIRDecoder(AIRGlimpse):
 
     def __init__(self, img_size, glimpse_size, glimpse_decoder, batch_dims=2,
                  mean_img=None, output_std=0.3, learn_std=False, bg_std=None,
-                 learn_bg_std=False, min_std=0., bg_bigger_than_fg_std=False):
+                 learn_bg_std=False, min_std=0., bg_bigger_than_fg_std=False, scale_bounds=None):
         """Initialises the module.
 
         :param img_size: Tuple of ints, size of the output image.
@@ -402,7 +409,7 @@ class AIRDecoder(AIRGlimpse):
         :param bg_bigger_than_fg_std: Boolean, constraints background std to be >= glimpse std if True.
         """
 
-        super(AIRDecoder, self).__init__(img_size, glimpse_size, inverse=True)
+        super(AIRDecoder, self).__init__(img_size, glimpse_size, inverse=True, scale_bounds=scale_bounds)
         self._batch_dims = batch_dims
         self._mean_img = mean_img
 
