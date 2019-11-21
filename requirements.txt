@@ -2,5 +2,5 @@ numpy
 matplotlib
 dm_sonnet
 scipy
-attrdict==2.0.0
-orderedattrdict==1.5
+attrdict>=2.0.0
+orderedattrdict>=1.5

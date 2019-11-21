@@ -25,11 +25,6 @@ except Exception:
     requirements = list(parse_requirements('requirements.txt', session=PipSession()))
 
 for item in requirements:
-    # we want to handle package names and also repo urls
-    print(dir(item))
-    print(item.req)
-    print(item.link)
-
     link = None
     if getattr(item, 'url', None):   # older pip has url
         link = str(item.url)
@@ -54,4 +49,6 @@ setup(
     name='sqair',
     version='0.1',
     packages=find_packages(),
+    install_requires=requires,
+    dependency_links=links,
 )
